@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { useCatalog } from "@/hooks/useCatalog";
 import { lmsApi } from "@/lib/api";
 import { buildQuery } from "@/lib/utils";
 
@@ -15,6 +16,7 @@ function ProgressContent() {
   const [year, setYear] = useState(Number(searchParams.get("year") || now.getFullYear()));
   const [month, setMonth] = useState(Number(searchParams.get("month") || now.getMonth() + 1));
   const [data, setData] = useState<any>(null);
+  const { items: absorptionLevels } = useCatalog("absorption-levels");
 
   useEffect(() => {
     lmsApi.classes("?limit=100").then((res) => {
@@ -119,9 +121,11 @@ function ProgressContent() {
                           onChange={(e) => saveCell(row.student.id, d, cell.homework || "", e.target.value)}
                         >
                           <option value="">Tiếp thu</option>
-                          <option value="good">Tốt</option>
-                          <option value="fair">Khá</option>
-                          <option value="needs_focus">Cần tập trung</option>
+                          {absorptionLevels.map((level) => (
+                            <option key={level.id} value={level.code}>
+                              {level.name}
+                            </option>
+                          ))}
                         </select>
                       </td>
                     );

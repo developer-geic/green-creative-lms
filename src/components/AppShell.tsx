@@ -11,6 +11,7 @@ import {
   ClipboardList,
   GraduationCap,
   LayoutDashboard,
+  Library,
   Search,
   Settings,
   Upload,
@@ -18,8 +19,10 @@ import {
   UserCircle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { canAccessCatalogs } from "@/components/catalogs/catalogTabs";
 import { cn } from "@/lib/utils";
 import { lmsApi } from "@/lib/api";
+import type { CatalogPermissions } from "@/types/lms";
 
 const NAV = [
   { href: "/dashboard", label: "Tổng quan", icon: LayoutDashboard },
@@ -43,16 +46,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const role = (session?.user as any)?.role;
+  const isAdmin = role === "admin";
   const [unread, setUnread] = useState(0);
+  const [catalogPerms, setCatalogPerms] = useState<CatalogPermissions | null>(null);
 
   useEffect(() => {
-    lmsApi
-      .unreadCount()
-      .then((res) => setUnread(res.data?.count || 0))
-      .catch(() => setUnread(0));
+    Promise.all([
+      lmsApi.unreadCount().catch(() => ({ data: { count: 0 } })),
+      lmsApi.me().catch(() => null),
+    ]).then(([unreadRes, meRes]) => {
+      setUnread(unreadRes.data?.count || 0);
+      setCatalogPerms(meRes?.data?.user?.catalog_permissions || null);
+    });
   }, [pathname]);
 
-  const items = role === "admin" ? [...NAV, ...ADMIN_NAV] : NAV;
+  const showCatalogs = canAccessCatalogs(isAdmin, catalogPerms);
+  const items = [
+    ...NAV,
+    ...(showCatalogs ? [{ href: "/catalogs", label: "Danh mục", icon: Library }] : []),
+    ...(isAdmin ? ADMIN_NAV : []),
+  ];
 
   return (
     <div className="flex min-h-screen bg-muted">

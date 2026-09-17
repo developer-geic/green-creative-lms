@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
+import { useCatalog } from "@/hooks/useCatalog";
 import { lmsApi } from "@/lib/api";
 import { buildQuery } from "@/lib/utils";
 import type { LmsClass } from "@/types/lms";
@@ -41,13 +42,20 @@ function ClassesContent() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({
     code: "",
-    program: "",
-    course: "",
+    program_id: "" as string,
+    course_id: "" as string,
     schedule: "",
     time: "",
     room: "",
     days: [] as number[],
   });
+
+  const { items: programs } = useCatalog("programs");
+  const { items: allCourses } = useCatalog("courses");
+  const filteredCourses = useMemo(() => {
+    if (!form.program_id) return allCourses;
+    return allCourses.filter((c) => String(c.program_id) === form.program_id);
+  }, [allCourses, form.program_id]);
 
   function load() {
     const query = buildQuery({
@@ -81,10 +89,18 @@ function ClassesContent() {
   async function createClass(e: FormEvent) {
     e.preventDefault();
     try {
-      await lmsApi.createClass(form);
+      await lmsApi.createClass({
+        code: form.code,
+        program_id: form.program_id ? Number(form.program_id) : null,
+        course_id: form.course_id ? Number(form.course_id) : null,
+        schedule: form.schedule || null,
+        time: form.time || null,
+        room: form.room || null,
+        days: form.days,
+      });
       toast.success("Đã tạo lớp");
       setShowCreate(false);
-      setForm({ code: "", program: "", course: "", schedule: "", time: "", room: "", days: [] });
+      setForm({ code: "", program_id: "", course_id: "", schedule: "", time: "", room: "", days: [] });
       load();
     } catch (err: any) {
       toast.error(err.message);
@@ -207,8 +223,32 @@ function ClassesContent() {
           <form onSubmit={createClass} className="card w-full max-w-lg space-y-3">
             <h2 className="font-semibold">Thêm lớp học</h2>
             <input className="input" required placeholder="Mã lớp" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
-            <input className="input" placeholder="Chương trình" value={form.program} onChange={(e) => setForm({ ...form, program: e.target.value })} />
-            <input className="input" placeholder="Khoá học" value={form.course} onChange={(e) => setForm({ ...form, course: e.target.value })} />
+            <select
+              className="input"
+              value={form.program_id}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  program_id: e.target.value,
+                  course_id: "",
+                }))
+              }
+            >
+              <option value="">— Chương trình —</option>
+              {programs.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <select
+              className="input"
+              value={form.course_id}
+              onChange={(e) => setForm({ ...form, course_id: e.target.value })}
+            >
+              <option value="">— Khóa học —</option>
+              {filteredCourses.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
             <input className="input" placeholder="Lịch (T2-4-6)" value={form.schedule} onChange={(e) => setForm({ ...form, schedule: e.target.value })} />
             <input className="input" placeholder="Giờ học" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
             <input className="input" placeholder="Phòng" value={form.room} onChange={(e) => setForm({ ...form, room: e.target.value })} />

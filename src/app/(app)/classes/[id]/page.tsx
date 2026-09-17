@@ -1,15 +1,28 @@
 "use client";
 
+import { FormEvent, useDeferredValue, useEffect, useState, useTransition } from "react";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
+import { useCatalog } from "@/hooks/useCatalog";
 import { lmsApi } from "@/lib/api";
 
 export default function ClassDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === "admin";
   const [data, setData] = useState<any>(null);
+  const [mode, setMode] = useState<"existing" | "new">("existing");
+  const [studentId, setStudentId] = useState("");
   const [studentName, setStudentName] = useState("");
+  const [statusCode, setStatusCode] = useState("active");
+  const [masterQuery, setMasterQuery] = useState("");
+  const deferredQuery = useDeferredValue(masterQuery);
+  const [masters, setMasters] = useState<any[]>([]);
+  const [canManageStudents, setCanManageStudents] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const { items: statuses } = useCatalog("student-statuses");
 
   function load() {
     lmsApi
@@ -20,14 +33,49 @@ export default function ClassDetailPage() {
 
   useEffect(() => {
     load();
+    lmsApi.me().then((res) => {
+      const role = res.data?.user?.role;
+      const flags = res.data?.user?.catalog_permissions;
+      setCanManageStudents(role === "admin" || !!flags?.manage_students);
+    });
   }, [id]);
 
-  async function addStudent(e: React.FormEvent) {
+  useEffect(() => {
+    const qs = deferredQuery
+      ? `?q=${encodeURIComponent(deferredQuery)}&limit=20`
+      : "?limit=20";
+    lmsApi.students(qs).then((res) => setMasters(res.data || [])).catch(() => {});
+  }, [deferredQuery]);
+
+  function addStudent(e: FormEvent) {
     e.preventDefault();
+    startTransition(async () => {
+      try {
+        if (mode === "existing") {
+          if (!studentId) return toast.error("Chọn học viên");
+          await lmsApi.createEnrollment(id, {
+            student_id: Number(studentId),
+            status: statusCode,
+          });
+        } else {
+          await lmsApi.createEnrollment(id, {
+            full_name: studentName,
+            status: statusCode,
+          });
+        }
+        setStudentId("");
+        setStudentName("");
+        toast.success("Đã thêm học viên vào lớp");
+        load();
+      } catch (err: any) {
+        toast.error(err.message);
+      }
+    });
+  }
+
+  async function updateStatus(enrollmentId: number, status: string) {
     try {
-      await lmsApi.createStudent({ class_id: Number(id), full_name: studentName });
-      setStudentName("");
-      toast.success("Đã thêm học viên");
+      await lmsApi.updateEnrollment(id, enrollmentId, { status });
       load();
     } catch (err: any) {
       toast.error(err.message);
@@ -41,7 +89,7 @@ export default function ClassDetailPage() {
       <div>
         <h1 className="text-2xl font-bold text-primary-dark">{data.code}</h1>
         <p className="text-sm text-slate-500">
-          {data.course || "—"} · {data.schedule} · {data.time} · {data.room}
+          {data.course || "—"} · {data.program || "—"} · {data.schedule} · {data.time} · {data.room}
         </p>
         <div className="mt-2">
           <span
@@ -69,27 +117,100 @@ export default function ClassDetailPage() {
           <h2 className="font-semibold">Học viên ({data.student_count})</h2>
         </div>
         {!data.is_locked && (
-          <form onSubmit={addStudent} className="mb-4 flex gap-2">
-            <input
+          <form onSubmit={addStudent} className="mb-4 space-y-2 rounded-lg border border-border p-3">
+            <div className="flex gap-2 text-sm">
+              <button
+                type="button"
+                className={`btn !py-1 ${mode === "existing" ? "btn-primary" : "btn-ghost"}`}
+                onClick={() => setMode("existing")}
+              >
+                Chọn HV có sẵn
+              </button>
+              {(isAdmin || canManageStudents) && (
+                <button
+                  type="button"
+                  className={`btn !py-1 ${mode === "new" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setMode("new")}
+                >
+                  Thêm HV mới
+                </button>
+              )}
+            </div>
+            {mode === "existing" ? (
+              <>
+                <input
+                  className="input"
+                  placeholder="Tìm học viên master..."
+                  value={masterQuery}
+                  onChange={(e) => setMasterQuery(e.target.value)}
+                />
+                <select
+                  className="input"
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  required
+                >
+                  <option value="">— Chọn học viên —</option>
+                  {masters.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.full_name}
+                      {s.parent_phone ? ` · ${s.parent_phone}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <input
+                className="input"
+                placeholder="Họ tên học viên mới"
+                value={studentName}
+                onChange={(e) => setStudentName(e.target.value)}
+                required
+              />
+            )}
+            <select
               className="input"
-              placeholder="Họ tên học viên"
-              value={studentName}
-              onChange={(e) => setStudentName(e.target.value)}
-              required
-            />
-            <button className="btn btn-primary">Thêm</button>
+              value={statusCode}
+              onChange={(e) => setStatusCode(e.target.value)}
+            >
+              {statuses.map((s) => (
+                <option key={s.id} value={s.code}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <button className="btn btn-primary" disabled={pending}>
+              Thêm vào lớp
+            </button>
           </form>
         )}
         <div className="space-y-2">
           {(data.students || []).map((s: any) => (
-            <div key={s.id} className="flex justify-between border-b border-border py-2 text-sm">
+            <div key={s.enrollment_id || s.id} className="flex items-center justify-between gap-2 border-b border-border py-2 text-sm">
               <div>
                 <div className="font-medium">{s.full_name}</div>
                 <div className="text-xs text-slate-500">{s.parent_phone || "—"}</div>
               </div>
-              <span className="pill pill-neutral">{s.status}</span>
+              {!data.is_locked ? (
+                <select
+                  className="input max-w-[160px] !py-1 text-xs"
+                  value={s.status || "active"}
+                  onChange={(e) => updateStatus(s.enrollment_id, e.target.value)}
+                >
+                  {statuses.map((st) => (
+                    <option key={st.id} value={st.code}>
+                      {st.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="pill pill-neutral">{s.status_name || s.status}</span>
+              )}
             </div>
           ))}
+          {!data.students?.length && (
+            <p className="py-4 text-center text-sm text-slate-500">Chưa có học viên trong lớp.</p>
+          )}
         </div>
       </div>
     </div>

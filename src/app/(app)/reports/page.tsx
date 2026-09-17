@@ -46,7 +46,9 @@ export default function ReportsPage() {
               onClick={() => openStudent(s.id)}
             >
               <span className="font-medium">{s.full_name}</span>
-              <span className="text-xs text-slate-500">{s.class_model?.code || s.class_id}</span>
+              <span className="text-xs text-slate-500">
+                {(s.enrollments || []).map((e: any) => e.class_code).filter(Boolean).join(", ") || "—"}
+              </span>
             </button>
           ))}
         </div>
@@ -57,7 +59,10 @@ export default function ReportsPage() {
           <div>
             <h2 className="text-xl font-semibold">{detail.full_name}</h2>
             <p className="text-sm text-slate-500">
-              {detail.class_model?.code} · {detail.parent_phone || "—"} · {detail.status}
+              {(detail.enrollments || [])
+                .map((e: any) => `${e.class_model?.code || e.class_id} (${e.status?.name || e.status?.code || "—"})`)
+                .join(" · ") || "Chưa enroll lớp"}{" "}
+              · {detail.parent_phone || "—"}
             </p>
           </div>
           <div>

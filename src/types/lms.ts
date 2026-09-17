@@ -1,3 +1,11 @@
+export type CatalogPermissions = {
+  manage_programs: boolean;
+  manage_courses: boolean;
+  manage_students: boolean;
+  manage_student_statuses: boolean;
+  manage_absorption_levels: boolean;
+};
+
 export type LmsUser = {
   id: number;
   email: string;
@@ -6,11 +14,26 @@ export type LmsUser = {
   phone?: string | null;
   role: "admin" | "teacher" | null;
   status: "pending" | "approved" | "disabled";
+  catalog_permissions?: CatalogPermissions;
+};
+
+export type LmsCatalogItem = {
+  id: number;
+  code: string;
+  name: string;
+  sort_order?: number;
+  is_active?: boolean;
+  is_system?: boolean;
+  color?: string | null;
+  program_id?: number | null;
+  program?: { id: number; name: string; code: string } | null;
 };
 
 export type LmsClass = {
   id: number;
   code: string;
+  program_id?: number | null;
+  course_id?: number | null;
   program?: string | null;
   course?: string | null;
   schedule?: string | null;
@@ -33,14 +56,27 @@ export type LmsClass = {
     name?: string | null;
     email?: string | null;
   }>;
+  students?: LmsStudent[];
 };
 
 export type LmsStudent = {
   id: number;
-  class_id: number;
+  enrollment_id?: number;
+  class_id?: number | null;
+  student_id?: number;
   full_name: string;
   english_name?: string | null;
   parent_phone?: string | null;
   notes?: string | null;
-  status: "active" | "reserved" | "dropped";
+  status?: string | null;
+  status_id?: number | null;
+  status_name?: string | null;
+  enrollments?: Array<{
+    id: number;
+    class_id: number;
+    class_code?: string | null;
+    status?: string | null;
+    status_id?: number | null;
+    status_name?: string | null;
+  }>;
 };

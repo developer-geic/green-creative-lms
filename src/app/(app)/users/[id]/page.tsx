@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { CatalogPermissionEditor } from "@/components/catalogs/CatalogPermissionEditor";
 import { lmsApi } from "@/lib/api";
 
 export default function UserDetailPage() {
@@ -38,6 +39,20 @@ export default function UserDetailPage() {
         <div>Role: {data.user?.role}</div>
         <div>Status: {data.user?.status}</div>
       </div>
+
+      {data.user?.role === "teacher" && (
+        <CatalogPermissionEditor
+          userId={id}
+          initial={data.catalog_permissions || data.user?.catalog_permissions}
+          onSaved={(flags) =>
+            setData((prev: any) => ({
+              ...prev,
+              catalog_permissions: flags,
+              user: { ...prev.user, catalog_permissions: flags },
+            }))
+          }
+        />
+      )}
 
       <div className="card">
         <h2 className="mb-2 font-semibold">Hồ sơ giáo viên</h2>

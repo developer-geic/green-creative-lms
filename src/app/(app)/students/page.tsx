@@ -13,17 +13,23 @@ function StudentsContent() {
   const [classes, setClasses] = useState<any[]>([]);
   const [q, setQ] = useState(searchParams.get("q") || "");
   const [classId, setClassId] = useState(searchParams.get("class_id") || "");
-  const [status, setStatus] = useState(searchParams.get("status") || "");
 
   function load() {
-    const query = buildQuery({ q, class_id: classId, status });
+    const query = buildQuery({ q, class_id: classId });
     router.replace(`/students${query}`);
     lmsApi.students(query).then((res) => setItems(res.data || [])).catch((e) => toast.error(e.message));
   }
 
   useEffect(() => {
-    lmsApi.classes("?limit=100").then((res) => setClasses(res.data || [])).catch(() => {});
-    load();
+    Promise.all([
+      lmsApi.classes("?limit=100"),
+      lmsApi.students(buildQuery({ q, class_id: classId })),
+    ])
+      .then(([classesRes, studentsRes]) => {
+        setClasses(classesRes.data || []);
+        setItems(studentsRes.data || []);
+      })
+      .catch((e) => toast.error(e.message));
   }, []);
 
   return (
@@ -37,12 +43,6 @@ function StudentsContent() {
             <option key={c.id} value={c.id}>{c.code}</option>
           ))}
         </select>
-        <select className="input max-w-xs" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">Tất cả trạng thái</option>
-          <option value="active">Đang học</option>
-          <option value="reserved">Bảo lưu</option>
-          <option value="dropped">Nghỉ học</option>
-        </select>
         <button className="btn btn-primary" onClick={load}>Lọc</button>
       </div>
       <div className="card overflow-x-auto">
@@ -50,22 +50,25 @@ function StudentsContent() {
           <thead>
             <tr className="border-b border-border text-left text-slate-500">
               <th className="py-2">Họ tên</th>
-              <th>Lớp</th>
+              <th>Lớp / trạng thái</th>
               <th>SĐT PH</th>
-              <th>Trạng thái</th>
             </tr>
           </thead>
           <tbody>
             {items.map((s) => (
               <tr key={s.id} className="border-b border-border/70">
                 <td className="py-2 font-medium">{s.full_name}</td>
-                <td>{s.class_model?.code || s.class_id}</td>
+                <td className="text-xs text-slate-600">
+                  {(s.enrollments || [])
+                    .map((e: any) => `${e.class_code || e.class_id} (${e.status_name || e.status})`)
+                    .join(", ") || "—"}
+                </td>
                 <td>{s.parent_phone || "—"}</td>
-                <td><span className="pill pill-neutral">{s.status}</span></td>
               </tr>
             ))}
           </tbody>
         </table>
+        {!items.length && <p className="py-6 text-center text-sm text-slate-500">Không có học viên.</p>}
       </div>
     </div>
   );

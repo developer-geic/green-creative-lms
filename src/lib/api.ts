@@ -107,7 +107,65 @@ export const lmsApi = {
     lmsFetch("/lms/students", { method: "POST", body: JSON.stringify(body) }),
   updateStudent: (id: number | string, body: unknown) =>
     lmsFetch(`/lms/students/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteStudent: (id: number | string) =>
+    lmsFetch(`/lms/students/${id}`, { method: "DELETE" }),
   studentDetail: (id: number | string) => lmsFetch(`/lms/students/${id}`),
+  classEnrollments: (classId: number | string) =>
+    lmsFetch(`/lms/classes/${classId}/enrollments`),
+  createEnrollment: (classId: number | string, body: unknown) =>
+    lmsFetch(`/lms/classes/${classId}/enrollments`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateEnrollment: (classId: number | string, enrollmentId: number | string, body: unknown) =>
+    lmsFetch(`/lms/classes/${classId}/enrollments/${enrollmentId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteEnrollment: (classId: number | string, enrollmentId: number | string) =>
+    lmsFetch(`/lms/classes/${classId}/enrollments/${enrollmentId}`, { method: "DELETE" }),
+  catalogPrograms: (includeInactive = false) =>
+    lmsFetch(`/lms/catalogs/programs${includeInactive ? "?include_inactive=1" : ""}`),
+  catalogCourses: (programId?: number | null, includeInactive = false) => {
+    const params = new URLSearchParams();
+    if (programId) params.set("program_id", String(programId));
+    if (includeInactive) params.set("include_inactive", "1");
+    const qs = params.toString();
+    return lmsFetch(`/lms/catalogs/courses${qs ? `?${qs}` : ""}`);
+  },
+  catalogStudentStatuses: (includeInactive = false) =>
+    lmsFetch(`/lms/catalogs/student-statuses${includeInactive ? "?include_inactive=1" : ""}`),
+  catalogAbsorptionLevels: (includeInactive = false) =>
+    lmsFetch(`/lms/catalogs/absorption-levels${includeInactive ? "?include_inactive=1" : ""}`),
+  createCatalogProgram: (body: unknown) =>
+    lmsFetch("/lms/catalogs/programs", { method: "POST", body: JSON.stringify(body) }),
+  updateCatalogProgram: (id: number | string, body: unknown) =>
+    lmsFetch(`/lms/catalogs/programs/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteCatalogProgram: (id: number | string) =>
+    lmsFetch(`/lms/catalogs/programs/${id}`, { method: "DELETE" }),
+  createCatalogCourse: (body: unknown) =>
+    lmsFetch("/lms/catalogs/courses", { method: "POST", body: JSON.stringify(body) }),
+  updateCatalogCourse: (id: number | string, body: unknown) =>
+    lmsFetch(`/lms/catalogs/courses/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteCatalogCourse: (id: number | string) =>
+    lmsFetch(`/lms/catalogs/courses/${id}`, { method: "DELETE" }),
+  createCatalogStatus: (body: unknown) =>
+    lmsFetch("/lms/catalogs/student-statuses", { method: "POST", body: JSON.stringify(body) }),
+  updateCatalogStatus: (id: number | string, body: unknown) =>
+    lmsFetch(`/lms/catalogs/student-statuses/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteCatalogStatus: (id: number | string) =>
+    lmsFetch(`/lms/catalogs/student-statuses/${id}`, { method: "DELETE" }),
+  createCatalogAbsorption: (body: unknown) =>
+    lmsFetch("/lms/catalogs/absorption-levels", { method: "POST", body: JSON.stringify(body) }),
+  updateCatalogAbsorption: (id: number | string, body: unknown) =>
+    lmsFetch(`/lms/catalogs/absorption-levels/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteCatalogAbsorption: (id: number | string) =>
+    lmsFetch(`/lms/catalogs/absorption-levels/${id}`, { method: "DELETE" }),
+  updateCatalogPermissions: (userId: number | string, body: unknown) =>
+    lmsFetch(`/lms/users/${userId}/catalog-permissions`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   attendance: (classId: number | string, query = "") =>
     lmsFetch(`/lms/classes/${classId}/attendance${query}`),
   upsertAttendance: (sessionId: number | string, records: unknown[]) =>

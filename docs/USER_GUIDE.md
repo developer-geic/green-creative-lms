@@ -36,7 +36,7 @@ LMS nội bộ dùng để quản lý lớp, học viên, điểm danh, tiến �
 Giáo viên **chỉ thấy / thao tác các lớp được gán** (trong danh sách giáo viên của lớp). Khi **tự tạo lớp**, hệ thống tự gán bạn làm giáo viên của lớp đó.
 
 ### Menu
-Tổng quan · Lớp học · Học viên · Điểm danh · Tiến độ · Đánh giá · Tra cứu HV · Thông báo · Hồ sơ cá nhân
+Tổng quan · Lớp học · Học viên · Điểm danh · Tiến độ · Đánh giá · Tra cứu HV · Thông báo · Hồ sơ cá nhân · Danh mục (nếu được cấp quyền)
 
 ### Tổng quan
 - Số lớp đang hoạt động, học viên, buổi học hôm nay.
@@ -46,7 +46,7 @@ Tổng quan · Lớp học · Học viên · Điểm danh · Tiến độ · Đ�
 ### Lớp học
 **Tạo lớp**
 1. Bấm **Thêm lớp**.
-2. Điền mã lớp (bắt buộc), chương trình, khoá, lịch, giờ, phòng.
+2. Điền mã lớp (bắt buộc), chọn **Chương trình** và **Khóa học** từ danh mục (cascade), lịch, giờ, phòng.
 3. Chọn **ngày trong tuần** (CN–T7) — dùng để sinh buổi điểm danh.
 4. Lưu → lớp ở trạng thái **Đang hoạt động**.
 
@@ -64,9 +64,14 @@ Tổng quan · Lớp học · Học viên · Điểm danh · Tiến độ · Đ�
 **Sĩ số:** tối thiểu khuyến nghị 5, tối đa 15 học viên / lớp.
 
 ### Học viên
-- Thêm học viên vào lớp: họ tên, tên tiếng Anh, SĐT phụ huynh, ghi chú.
-- Status học viên: `active` (đang học) · `reserved` (bảo lưu) · `dropped` (nghỉ).
-- Không trùng họ tên trong cùng một lớp.
+- Học viên là **master** (dùng chung nhiều lớp). Trong lớp: **enroll** HV có sẵn hoặc **Thêm HV mới** (cần quyền `manage_students`).
+- Trạng thái theo enrollment (danh mục): `active` / `reserved` / `dropped` (và các mục Admin/GV được cấp quyền thêm).
+- Không enroll trùng cùng HV trong một lớp.
+
+### Danh mục
+- Menu **Danh mục** (Admin luôn thấy; Teacher thấy nếu được cấp ≥1 quyền).
+- Tab: Chương trình · Khóa học · Học viên master · Trạng thái HV · Mức tiếp thu.
+- Mục hệ thống (`is_system`) không xóa được; có thể soft-disable `is_active`.
 
 ### Điểm danh
 1. Chọn lớp + tháng/năm.
@@ -75,7 +80,7 @@ Tổng quan · Lớp học · Học viên · Điểm danh · Tiến độ · Đ�
 4. Tỷ lệ có mặt = số **có mặt** / số ô **đã chấm** (ô trống không tính).
 
 ### Tiến độ học
-- Theo từng buổi: bài tập (`done` / `missing`), mức tiếp thu (`good` / `fair` / `needs_focus`).
+- Theo từng buổi: bài tập (`done` / `missing`), mức tiếp thu chọn từ danh mục (mặc định: Tốt / Khá / Cần tập trung).
 
 ### Đánh giá (mid / final)
 - Theo lớp + học viên + tháng/năm + kỳ (`mid` / `final`).
@@ -101,7 +106,7 @@ Tổng quan · Lớp học · Học viên · Điểm danh · Tiến độ · Đ�
 Admin có **toàn bộ quyền của giáo viên**, cộng thêm:
 
 ### Menu thêm
-**Thống kê** · **Người dùng** · **Import Excel**
+**Thống kê** · **Người dùng** · **Import Excel** · **Danh mục** (đầy đủ)
 
 ### Lớp học (quyền mở rộng)
 - Xem **mọi lớp** (không chỉ lớp được gán).
@@ -111,7 +116,7 @@ Admin có **toàn bộ quyền của giáo viên**, cộng thêm:
 ### Người dùng
 1. Duyệt tài khoản **pending** → chọn role `admin` hoặc `teacher`.
 2. Tạo user mới, khóa (`disabled`), reset mật khẩu.
-3. Click tên giáo viên → xem / mở hồ sơ.
+3. Click tên giáo viên → xem / mở hồ sơ; cấp **Quyền danh mục** (checkbox).
 4. Duyệt yêu cầu đổi hồ sơ GV (từ lần sửa thứ 2).
 
 > Không vô hiệu hóa / xóa **admin cuối cùng** trong hệ thống.
@@ -141,6 +146,7 @@ Dùng khi đưa dữ liệu cũ vào LMS (không migrate Firebase).
 | Kết thúc lớp (`ended`) | ✅ | ✅ |
 | Đặt `inactive` / mở lại lớp | ❌ | ✅ |
 | Quản lý HV / ĐD / Tiến độ / Đánh giá (lớp active) | ✅ | ✅ |
+| Danh mục (CRUD theo flag) | Theo quyền cấp | ✅ |
 | Tra cứu HV | ✅ | ✅ |
 | Thông báo + thu hồi 2h | ✅ | ✅ + thu hồi mọi lúc |
 | Hồ sơ: lần 1 tự sửa / lần sau duyệt | ✅ | Duyệt yêu cầu |
