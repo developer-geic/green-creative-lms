@@ -1,15 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #0f172a;
-  --primary: #059669;
-  --primary-dark: #006d5b;
-  --primary-soft: #d1fae5;
-  --muted: #f8fafc;
-  --border: #e2e8f0;
-  --danger: #dc2626;
-  --warn: #d97706;
+  --background: #f8f9ff;
+  --foreground: #0b1c30;
+  --primary: #006948;
+  --primary-dark: #005137;
+  --primary-soft: #85f8c4;
+  --primary-container: #00855d;
+  --on-primary: #ffffff;
+  --surface: #ffffff;
+  --surface-low: #eff4ff;
+  --surface-high: #dce9ff;
+  --surface-highest: #d3e4fe;
+  --muted: #eff4ff;
+  --border: #bccac0;
+  --outline: #6d7a72;
+  --on-surface-variant: #3d4a42;
+  --danger: #ba1a1a;
+  --danger-container: #ffdad6;
+  --warn: #92400e;
+  --secondary: #565e74;
 }
 
 @theme inline {
@@ -18,17 +28,27 @@
   --color-primary: var(--primary);
   --color-primary-dark: var(--primary-dark);
   --color-primary-soft: var(--primary-soft);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary: var(--on-primary);
+  --color-surface: var(--surface);
+  --color-surface-low: var(--surface-low);
+  --color-surface-high: var(--surface-high);
+  --color-surface-highest: var(--surface-highest);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-outline: var(--outline);
+  --color-on-surface-variant: var(--on-surface-variant);
   --color-danger: var(--danger);
+  --color-danger-container: var(--danger-container);
   --color-warn: var(--warn);
-  --font-sans: var(--font-geist-sans);
+  --color-secondary: var(--secondary);
+  --font-sans: var(--font-be-vietnam);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-be-vietnam), system-ui, sans-serif;
 }
 
 .btn {
@@ -39,24 +59,25 @@ body {
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   transition: 0.15s ease;
 }
 
 .btn-primary {
   background: var(--primary);
   color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 105, 72, 0.2);
 }
 .btn-primary:hover {
-  background: var(--primary-dark);
+  background: var(--primary-container);
 }
 
 .btn-ghost {
-  border: 1px solid var(--border);
-  background: #fff;
+  background: var(--surface-low);
+  color: var(--foreground);
 }
 .btn-ghost:hover {
-  background: var(--muted);
+  background: var(--surface-high);
 }
 
 .btn-danger {
@@ -66,29 +87,31 @@ body {
 
 .input {
   width: 100%;
+  height: 2.5rem;
   border-radius: 0.5rem;
-  border: 1px solid var(--border);
-  background: #fff;
+  border: none;
+  background: var(--surface-low);
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
   outline: none;
+  color: var(--foreground);
 }
 .input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.2);
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--primary);
 }
 
 .card {
   border-radius: 0.75rem;
-  border: 1px solid var(--border);
-  background: #fff;
-  padding: 1rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  background: var(--surface);
+  padding: 1.5rem;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
+  gap: 0.25rem;
   border-radius: 9999px;
   padding: 0.125rem 0.625rem;
   font-size: 0.75rem;
@@ -99,14 +122,38 @@ body {
   color: var(--primary-dark);
 }
 .pill-warn {
-  background: #fef3c7;
+  background: #fffbeb;
   color: #92400e;
 }
 .pill-danger {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--danger-container);
+  color: #93000a;
 }
 .pill-neutral {
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--surface-high);
+  color: var(--on-surface-variant);
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 0.5rem;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--on-surface-variant);
+  transition: 0.15s ease;
+}
+.nav-link:hover {
+  background: var(--surface-high);
+  color: var(--foreground);
+}
+.nav-link-active {
+  background: var(--primary-container);
+  color: #f5fff7;
+}
+.nav-link-active:hover {
+  background: var(--primary-container);
+  color: #f5fff7;
 }

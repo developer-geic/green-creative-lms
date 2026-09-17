@@ -98,16 +98,21 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted p-4">
-      <div className="card w-full max-w-md space-y-4">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-surface p-8 shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
+        <div className="relative space-y-4">
         <div>
-          <h1 className="text-xl font-bold text-primary-dark">Đăng nhập LMS</h1>
-          <p className="text-sm text-slate-500">Trung tâm Ngoại ngữ Sáng Tạo Xanh</p>
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-bold text-on-primary">
+            ST
+          </div>
+          <h1 className="text-xl font-bold text-foreground">Đăng nhập LMS</h1>
+          <p className="text-sm text-on-surface-variant">Sáng Tạo Xanh · Enterprise LMS</p>
         </div>
 
         {step === "email" && (
           <form onSubmit={continueEmail} className="space-y-3">
-            <label className="block text-sm font-medium">Email</label>
+            <label className="block text-xs font-semibold text-on-surface-variant">Email</label>
             <input className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
             <button className="btn btn-primary w-full" disabled={loading}>Tiếp tục</button>
           </form>
@@ -115,7 +120,7 @@ export default function LoginPage() {
 
         {step === "password" && (
           <form onSubmit={doLogin} className="space-y-3">
-            <p className="text-sm text-slate-600">{email}</p>
+            <p className="text-sm text-on-surface-variant">{email}</p>
             <input className="input" type="password" required placeholder="Mật khẩu" value={password} onChange={(e) => setPassword(e.target.value)} />
             <button className="btn btn-primary w-full" disabled={loading}>Đăng nhập</button>
             <button type="button" className="btn btn-ghost w-full" onClick={() => setStep("email")}>Email khác</button>
@@ -124,7 +129,7 @@ export default function LoginPage() {
 
         {step === "set-password" && (
           <form onSubmit={doSetPassword} className="space-y-3">
-            <p className="text-sm text-slate-600">Thiết lập mật khẩu lần đầu cho {email}</p>
+            <p className="text-sm text-on-surface-variant">Thiết lập mật khẩu lần đầu cho {email}</p>
             <input className="input" placeholder="Tên hiển thị" value={name} onChange={(e) => setName(e.target.value)} />
             <input className="input" type="password" required minLength={4} placeholder="Mật khẩu mới" value={password} onChange={(e) => setPassword(e.target.value)} />
             <input className="input" type="password" required minLength={4} placeholder="Nhập lại mật khẩu" value={password2} onChange={(e) => setPassword2(e.target.value)} />
@@ -134,7 +139,7 @@ export default function LoginPage() {
 
         {step === "request" && (
           <form onSubmit={doRequest} className="space-y-3">
-            <p className="text-sm text-slate-600">{email} chưa có trong hệ thống. Gửi yêu cầu để admin duyệt.</p>
+            <p className="text-sm text-on-surface-variant">{email} chưa có trong hệ thống. Gửi yêu cầu để admin duyệt.</p>
             <input className="input" required placeholder="Họ tên" value={name} onChange={(e) => setName(e.target.value)} />
             <button className="btn btn-primary w-full" disabled={loading}>Gửi yêu cầu</button>
             <button type="button" className="btn btn-ghost w-full" onClick={() => setStep("email")}>Email khác</button>
@@ -143,17 +148,18 @@ export default function LoginPage() {
 
         {step === "pending" && (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">Yêu cầu đang chờ admin duyệt. Quay lại sau.</p>
+            <p className="text-sm text-on-surface-variant">Yêu cầu đang chờ admin duyệt. Quay lại sau.</p>
             <button className="btn btn-ghost w-full" onClick={() => setStep("email")}>Email khác</button>
           </div>
         )}
 
         {step === "disabled" && (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">Tài khoản đã bị vô hiệu hoá. Liên hệ admin.</p>
+            <p className="text-sm text-on-surface-variant">Tài khoản đã bị vô hiệu hoá. Liên hệ admin.</p>
             <button className="btn btn-ghost w-full" onClick={() => setStep("email")}>Email khác</button>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

@@ -52,7 +52,10 @@ export default function ClassDetailPage() {
     startTransition(async () => {
       try {
         if (mode === "existing") {
-          if (!studentId) return toast.error("Chọn học viên");
+          if (!studentId) {
+            toast.error("Chọn học viên");
+            return;
+          }
           await lmsApi.createEnrollment(id, {
             student_id: Number(studentId),
             status: statusCode,
@@ -67,8 +70,8 @@ export default function ClassDetailPage() {
         setStudentName("");
         toast.success("Đã thêm học viên vào lớp");
         load();
-      } catch (err: any) {
-        toast.error(err.message);
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Lỗi thêm học viên");
       }
     });
   }
