@@ -67,7 +67,7 @@ export default function UsersPage() {
 
       <form onSubmit={create} className="card flex flex-wrap gap-3 !p-4">
         <input
-          className="input max-w-xs"
+          className="input w-full sm:max-w-xs"
           required
           type="email"
           placeholder="Email"
@@ -75,20 +75,20 @@ export default function UsersPage() {
           onChange={(e) => setEmail(e.target.value)}
         />
         <input
-          className="input max-w-xs"
+          className="input w-full sm:max-w-xs"
           placeholder="Họ tên"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
         <select
-          className="input max-w-[160px]"
+          className="input w-full sm:max-w-[160px]"
           value={role}
           onChange={(e) => setRole(e.target.value)}
         >
           <option value="teacher">Giáo viên</option>
           <option value="admin">Admin</option>
         </select>
-        <button className="btn btn-primary">+ Tạo người dùng mới</button>
+        <button className="btn btn-primary w-full sm:w-auto">+ Tạo người dùng mới</button>
       </form>
 
       {pending.length > 0 ? (

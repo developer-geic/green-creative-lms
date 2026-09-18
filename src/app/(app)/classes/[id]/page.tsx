@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useDeferredValue, useEffect, useState, useTransition } from "react";
-import { useParams } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { useCatalog } from "@/hooks/useCatalog";
+import { SearchField } from "@/components/SearchField";
 import { lmsApi } from "@/lib/api";
 
 export default function ClassDetailPage() {
@@ -13,6 +14,7 @@ export default function ClassDetailPage() {
   const { data: session } = useSession();
   const isAdmin = (session?.user as any)?.role === "admin";
   const [data, setData] = useState<any>(null);
+  const [missing, setMissing] = useState(false);
   const [mode, setMode] = useState<"existing" | "new">("existing");
   const [studentId, setStudentId] = useState("");
   const [studentName, setStudentName] = useState("");
@@ -28,7 +30,13 @@ export default function ClassDetailPage() {
     lmsApi
       .classDetail(id)
       .then((res) => setData(res.data))
-      .catch((e) => toast.error(e.message));
+      .catch((e) => {
+        if (e?.statusCode === 404) {
+          setMissing(true);
+          return;
+        }
+        toast.error(e.message);
+      });
   }
 
   useEffect(() => {
@@ -46,6 +54,10 @@ export default function ClassDetailPage() {
       : "?limit=20";
     lmsApi.students(qs).then((res) => setMasters(res.data || [])).catch(() => {});
   }, [deferredQuery]);
+
+  if (missing) {
+    notFound();
+  }
 
   function addStudent(e: FormEvent) {
     e.preventDefault();
@@ -141,11 +153,11 @@ export default function ClassDetailPage() {
             </div>
             {mode === "existing" ? (
               <>
-                <input
-                  className="input"
+                <SearchField
                   placeholder="Tìm học viên master..."
                   value={masterQuery}
                   onChange={(e) => setMasterQuery(e.target.value)}
+                  type="text"
                 />
                 <select
                   className="input"

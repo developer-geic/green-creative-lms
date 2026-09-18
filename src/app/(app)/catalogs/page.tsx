@@ -21,12 +21,6 @@ const CatalogCrudPanel = dynamic(
   { loading: () => <PanelSkeleton /> },
 );
 
-const StudentMasterPanel = dynamic(
-  () =>
-    import("@/components/catalogs/StudentMasterPanel").then((m) => m.StudentMasterPanel),
-  { loading: () => <PanelSkeleton /> },
-);
-
 function PanelSkeleton() {
   return (
     <div className="space-y-2">
@@ -103,7 +97,7 @@ function CatalogsContent() {
       <div>
         <h1 className="text-2xl font-bold text-primary-dark">Danh mục</h1>
         <p className="text-sm text-slate-500">
-          Quản lý chương trình, khóa học, học viên master, trạng thái và mức tiếp thu.
+          Quản lý chương trình, khóa học, trạng thái học viên và mức tiếp thu.
         </p>
       </div>
 
@@ -126,7 +120,6 @@ function CatalogsContent() {
           onChanged={courses.reload}
         />
       )}
-      {active === "students" && <StudentMasterPanel />}
       {active === "statuses" && (
         <CatalogCrudPanel
           mode="statuses"

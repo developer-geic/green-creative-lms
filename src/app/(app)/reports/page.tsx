@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { SearchField } from "@/components/SearchField";
 import { lmsApi } from "@/lib/api";
 import { buildQuery } from "@/lib/utils";
 
@@ -37,7 +38,12 @@ export default function ReportsPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-primary-dark">Tra cứu học viên</h1>
       <div className="card">
-        <input className="input" placeholder="Gõ tên học viên..." value={q} onChange={(e) => setQ(e.target.value)} />
+        <SearchField
+          placeholder="Gõ tên học viên..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          type="text"
+        />
         <div className="mt-2 space-y-1">
           {results.map((s) => (
             <button

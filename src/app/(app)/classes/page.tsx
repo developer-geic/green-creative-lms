@@ -8,16 +8,17 @@ import {
   Download,
   Eye,
   Filter,
+  Pencil,
   PlayCircle,
   Plus,
   RefreshCw,
-  Search,
   TrendingUp,
   UserCheck,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCatalog } from "@/hooks/useCatalog";
+import { SearchField } from "@/components/SearchField";
 import { lmsApi } from "@/lib/api";
 import { buildQuery, cn } from "@/lib/utils";
 import type { LmsClass } from "@/types/lms";
@@ -54,8 +55,8 @@ function ClassesContent() {
         : ["active"],
   );
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<LmsClass | null>(null);
   const [form, setForm] = useState({
-    code: "",
     program_id: "" as string,
     course_id: "" as string,
     schedule: "",
@@ -63,6 +64,16 @@ function ClassesContent() {
     room: "",
     days: [] as number[],
   });
+
+  const modalOpen = showCreate || editing != null;
+  const emptyForm = {
+    program_id: "",
+    course_id: "",
+    schedule: "",
+    time: "",
+    room: "",
+    days: [] as number[],
+  };
 
   const { items: programs } = useCatalog("programs");
   const { items: allCourses } = useCatalog("courses");
@@ -114,7 +125,7 @@ function ClassesContent() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   function setStatusFilter(next: string[], qOverride?: string) {
@@ -145,24 +156,60 @@ function ClassesContent() {
     }));
   }
 
-  async function createClass(e: FormEvent) {
+  function closeModal() {
+    setShowCreate(false);
+    setEditing(null);
+    setForm(emptyForm);
+  }
+
+  function openCreate() {
+    setEditing(null);
+    setForm(emptyForm);
+    setShowCreate(true);
+  }
+
+  function openEdit(c: LmsClass) {
+    if (c.is_locked) return;
+    setShowCreate(false);
+    setEditing(c);
+    setForm({
+      program_id: c.program_id != null ? String(c.program_id) : "",
+      course_id: c.course_id != null ? String(c.course_id) : "",
+      schedule: c.schedule || "",
+      time: c.time || "",
+      room: c.room || "",
+      days: Array.isArray(c.days) ? [...c.days] : [],
+    });
+  }
+
+  async function saveClass(e: FormEvent) {
     e.preventDefault();
+    const body = {
+      program_id: form.program_id ? Number(form.program_id) : null,
+      course_id: form.course_id ? Number(form.course_id) : null,
+      schedule: form.schedule || null,
+      time: form.time || null,
+      room: form.room || null,
+      days: form.days,
+    };
     try {
-      await lmsApi.createClass({
-        code: form.code,
-        program_id: form.program_id ? Number(form.program_id) : null,
-        course_id: form.course_id ? Number(form.course_id) : null,
-        schedule: form.schedule || null,
-        time: form.time || null,
-        room: form.room || null,
-        days: form.days,
-      });
-      toast.success("Đã tạo lớp");
-      setShowCreate(false);
-      setForm({ code: "", program_id: "", course_id: "", schedule: "", time: "", room: "", days: [] });
+      if (editing) {
+        await lmsApi.updateClass(editing.id, body);
+        toast.success("Đã cập nhật lớp");
+      } else {
+        await lmsApi.createClass(body);
+        toast.success("Đã tạo lớp");
+      }
+      closeModal();
       load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Lỗi tạo lớp");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : editing
+            ? "Lỗi cập nhật lớp"
+            : "Lỗi tạo lớp",
+      );
     }
   }
 
@@ -200,12 +247,16 @@ function ClassesContent() {
             Danh sách các lớp đang giảng dạy và phân công phụ trách tại phân hiệu.
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start lg:self-auto">
+        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:self-auto">
           <button type="button" className="btn btn-ghost" disabled title="Sắp có">
             <Download className="h-4 w-4" />
             Xuất Excel
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
+          <button
+            type="button"
+            className="btn btn-primary w-full sm:w-auto"
+            onClick={openCreate}
+          >
             <Plus className="h-4 w-4" />
             Thêm lớp học mới
           </button>
@@ -294,18 +345,16 @@ function ClassesContent() {
         </div>
 
         <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-2 lg:grid-cols-12">
-          <div className="relative lg:col-span-5">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
-            <input
-              className="input pl-9"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Tìm theo mã lớp (STX-...), tên khóa học..."
-              type="text"
-            />
-          </div>
-          <div className="flex items-center justify-end gap-1.5 lg:col-span-7">
-            <button type="button" className="btn btn-ghost h-10" onClick={load}>
+          <SearchField
+            className="w-full"
+            wrapperClassName="w-full sm:max-w-xs lg:col-span-5 lg:max-w-none"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Tìm theo mã lớp (STX-...), tên khóa học..."
+            type="text"
+          />
+          <div className="flex w-full items-center justify-stretch gap-1.5 sm:justify-end lg:col-span-7">
+            <button type="button" className="btn btn-ghost h-10 flex-1 sm:flex-none" onClick={load}>
               <Filter className="h-4 w-4" />
               Lọc
             </button>
@@ -413,6 +462,16 @@ function ClassesContent() {
                         {!c.is_locked ? (
                           <button
                             type="button"
+                            className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
+                            title="Chỉnh sửa"
+                            onClick={() => openEdit(c)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                        {!c.is_locked ? (
+                          <button
+                            type="button"
                             className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
                             title="Kết thúc lớp"
                             onClick={() => endClass(c.id, c.code)}
@@ -448,46 +507,51 @@ function ClassesContent() {
         </div>
       </div>
 
-      {showCreate ? (
+      {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#213145]/40 p-4 backdrop-blur-sm">
           <form
-            onSubmit={createClass}
+            onSubmit={saveClass}
             className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
           >
             <div className="flex items-center justify-between bg-surface-low px-6 py-4">
               <div className="flex items-center gap-2">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary">
-                  <Plus className="h-5 w-5" />
+                  {editing ? <Pencil className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
                 </div>
                 <div className="flex flex-col">
-                  <h3 className="text-lg font-semibold text-foreground">Tạo Lớp học mới</h3>
+                  <h3 className="text-lg font-semibold text-foreground">
+                    {editing ? `Chỉnh sửa lớp ${editing.code}` : "Tạo Lớp học mới"}
+                  </h3>
                   <span className="text-xs text-on-surface-variant">
-                    Khởi tạo kế hoạch giảng dạy và xếp lịch
+                    {editing
+                      ? "Cập nhật chương trình, lịch và phòng học"
+                      : "Khởi tạo kế hoạch giảng dạy và xếp lịch"}
                   </span>
                 </div>
               </div>
               <button
                 type="button"
                 className="rounded-lg p-1.5 text-on-surface-variant hover:bg-surface-high"
-                onClick={() => setShowCreate(false)}
+                onClick={closeModal}
               >
                 <XCircle className="h-5 w-5" />
               </button>
             </div>
-            <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto p-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex max-h-[85dvh] flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+              {editing ? (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-foreground">
-                    Mã Lớp Học <span className="text-danger">*</span>
+                  <label className="text-xs font-semibold text-on-surface-variant">
+                    Mã lớp (không đổi)
                   </label>
                   <input
-                    className="input uppercase font-semibold"
-                    required
-                    placeholder="VD: STX-SCRATCH-08"
-                    value={form.code}
-                    onChange={(e) => setForm({ ...form, code: e.target.value })}
+                    className="input font-mono text-sm font-semibold"
+                    value={editing.code}
+                    disabled
+                    readOnly
                   />
                 </div>
+              ) : null}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-foreground">
                     Chương trình đào tạo
@@ -503,7 +567,7 @@ function ClassesContent() {
                       }))
                     }
                   >
-                    <option value="">— Chương trình —</option>
+                    <option value="">- Chương trình -</option>
                     {programs.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
@@ -511,23 +575,35 @@ function ClassesContent() {
                     ))}
                   </select>
                 </div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-foreground">Khóa học</label>
+                  <label className="text-xs font-semibold text-foreground">
+                    Khóa học <span className="text-danger">*</span>
+                  </label>
                   <select
                     className="input"
+                    required
                     value={form.course_id}
                     onChange={(e) => setForm({ ...form, course_id: e.target.value })}
                   >
-                    <option value="">— Khóa học —</option>
+                    <option value="">- Khóa học -</option>
                     {filteredCourses.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
                     ))}
                   </select>
+                  {!editing ? (
+                    <p className="text-[11px] text-on-surface-variant">
+                      Mã lớp sẽ được tạo tự động từ tên khóa học.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-on-surface-variant">
+                      Đổi khóa học không thay đổi mã lớp.
+                    </p>
+                  )}
                 </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-foreground">Phòng học</label>
                   <input
@@ -582,11 +658,11 @@ function ClassesContent() {
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-surface-low px-6 py-4">
-              <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>
+              <button type="button" className="btn btn-ghost" onClick={closeModal}>
                 Hủy
               </button>
               <button type="submit" className="btn btn-primary">
-                Lưu & Kích hoạt lớp
+                {editing ? "Lưu thay đổi" : "Lưu & Kích hoạt lớp"}
               </button>
             </div>
           </form>

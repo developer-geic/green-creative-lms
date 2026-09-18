@@ -8,7 +8,7 @@ import type { CatalogPermissions } from "@/types/lms";
 const LABELS: Array<{ key: keyof CatalogPermissions; label: string }> = [
   { key: "manage_programs", label: "Chương trình" },
   { key: "manage_courses", label: "Khóa học" },
-  { key: "manage_students", label: "Học viên master" },
+  { key: "manage_students", label: "Thêm/sửa học viên" },
   { key: "manage_student_statuses", label: "Trạng thái HV" },
   { key: "manage_absorption_levels", label: "Mức tiếp thu" },
 ];
@@ -54,7 +54,7 @@ export function CatalogPermissionEditor({
     <form onSubmit={save} className="card space-y-3">
       <h2 className="font-semibold">Quyền danh mục</h2>
       <p className="text-xs text-slate-500">
-        Giáo viên chỉ CRUD danh mục khi được bật. Đọc danh mục (dropdown) luôn được khi đã đăng nhập.
+        Giáo viên chỉ CRUD danh mục / hồ sơ học viên khi được bật. Đọc danh mục (dropdown) luôn được khi đã đăng nhập. Quyền học viên dùng ở trang Học viên và khi thêm HV mới vào lớp.
       </p>
       <div className="space-y-2">
         {LABELS.map(({ key, label }) => (

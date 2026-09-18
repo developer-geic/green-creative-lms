@@ -1,25 +1,16 @@
 "use client";
 
-import { SessionProvider, useSession } from "next-auth/react";
-import { useEffect } from "react";
+import { SessionProvider } from "next-auth/react";
 import { Toaster } from "sonner";
-import { setClientAccessToken } from "@/lib/api";
-
-function SessionTokenSync({ children }: { children: React.ReactNode }) {
-  const { data } = useSession();
-  useEffect(() => {
-    setClientAccessToken((data as { accessToken?: string } | null)?.accessToken);
-  }, [data]);
-  return <>{children}</>;
-}
+import { AuthGuard } from "@/components/AuthGuard";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider refetchInterval={0} refetchOnWindowFocus={false}>
-      <SessionTokenSync>
+    <SessionProvider refetchInterval={60} refetchOnWindowFocus>
+      <AuthGuard>
         {children}
         <Toaster richColors position="top-right" />
-      </SessionTokenSync>
+      </AuthGuard>
     </SessionProvider>
   );
 }

@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { getSession } from "next-auth/react";
 import { authOptions } from "@/auth";
+import { notifyForbidden, notifyUnauthorized } from "@/lib/auth-events";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8880/api/v1";
 
@@ -52,6 +53,13 @@ export async function lmsFetch<T = any>(
   const json = await res.json().catch(() => ({}));
 
   if (!res.ok) {
+    if (auth && typeof window !== "undefined") {
+      if (res.status === 401) {
+        notifyUnauthorized();
+      } else if (res.status === 403) {
+        notifyForbidden();
+      }
+    }
     throw {
       status: "error",
       statusCode: res.status,

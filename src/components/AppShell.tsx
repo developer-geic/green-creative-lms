@@ -14,14 +14,16 @@ import {
   LayoutDashboard,
   Library,
   LogOut,
-  Search,
+  Menu,
   ShieldCheck,
   Upload,
   Users,
   UserCircle,
+  X,
 } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { canAccessCatalogs } from "@/components/catalogs/catalogTabs";
+import { SearchField } from "@/components/SearchField";
 import { cn } from "@/lib/utils";
 import { lmsApi } from "@/lib/api";
 import type { CatalogPermissions } from "@/types/lms";
@@ -85,6 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [catalogPerms, setCatalogPerms] = useState<CatalogPermissions | null>(null);
   const [, startTransition] = useTransition();
   const [search, setSearch] = useState("");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -98,22 +101,60 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
   }, [pathname]);
 
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
+
   const showCatalogs = canAccessCatalogs(isAdmin, catalogPerms);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <aside className="fixed left-0 top-0 z-50 flex h-full w-64 flex-col justify-between bg-surface shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+      {mobileNavOpen ? (
+        <button
+          type="button"
+          aria-label="Đóng menu"
+          className="fixed inset-0 z-40 bg-[#213145]/40 backdrop-blur-sm md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      ) : null}
+
+      <aside
+        className={cn(
+          "fixed left-0 top-0 z-50 flex h-full w-64 flex-col justify-between bg-surface shadow-[0_1px_8px_rgba(0,0,0,0.04)] transition-transform duration-200 ease-out",
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full",
+          "md:translate-x-0",
+        )}
+      >
         <div className="flex flex-col overflow-hidden">
-          <div className="flex h-16 items-center gap-2 px-6">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-on-primary">
-              ST
+          <div className="flex h-16 items-center justify-between gap-2 px-4 md:px-6">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-on-primary">
+                ST
+              </div>
+              <div className="flex flex-col">
+                <span className="text-base font-semibold leading-tight text-primary">Sáng Tạo Xanh</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">
+                  Enterprise LMS
+                </span>
+              </div>
             </div>
-            <div className="flex flex-col">
-              <span className="text-base font-semibold leading-tight text-primary">Sáng Tạo Xanh</span>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">
-                Enterprise LMS
-              </span>
-            </div>
+            <button
+              type="button"
+              className="rounded-lg p-1.5 text-on-surface-variant hover:bg-surface-low md:hidden"
+              aria-label="Đóng menu"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
 
           <div className="px-4 pb-1 pt-2">
@@ -179,16 +220,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-h-screen flex-col pl-64">
-        <header className="fixed left-64 right-0 top-0 z-40 flex h-16 items-center justify-between bg-surface/90 px-6 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-xl">
-          <div className="flex max-w-xl flex-1 items-center gap-4">
+      <div className="flex min-h-screen flex-col pl-0 md:pl-64">
+        <header className="fixed left-0 right-0 top-0 z-40 flex h-16 items-center justify-between gap-2 bg-surface/90 px-4 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-xl md:left-64 md:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-4">
+            <button
+              type="button"
+              className="shrink-0 rounded-lg p-1.5 text-on-surface-variant hover:bg-surface-low md:hidden"
+              aria-label="Mở menu"
+              aria-expanded={mobileNavOpen}
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <Menu className="h-5 w-5" />
+            </button>
             <div className="hidden items-center gap-1 text-xs font-semibold text-on-surface-variant sm:flex">
               <span>LMS</span>
               <span className="text-outline">/</span>
               <span className="text-foreground">Hệ thống Quản trị</span>
             </div>
             <form
-              className="relative max-w-sm flex-1"
+              className="min-w-0 max-w-sm flex-1"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (search.trim()) {
@@ -196,18 +246,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 }
               }}
             >
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
-              <input
-                className="input h-10 pl-9"
-                type="search"
-                placeholder="Tra cứu nhanh mã lớp, học viên, email..."
+              <SearchField
+                placeholder="Tra cứu lớp, HV..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                className="w-full"
+                wrapperClassName="w-full"
               />
             </form>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5 rounded-full bg-surface-high px-3 py-1">
+          <div className="flex shrink-0 items-center gap-2 md:gap-4">
+            <div className="hidden items-center gap-1.5 rounded-full bg-surface-high px-3 py-1 sm:flex">
               <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
               <span className="text-[11px] font-semibold text-foreground">
                 {isAdmin ? "Admin / Giảng viên" : "Giảng viên"}
@@ -237,7 +286,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="w-full flex-1 bg-background px-6 pb-6 pt-20">{children}</main>
+        <main className="w-full flex-1 bg-background px-4 pb-6 pt-20 md:px-6">{children}</main>
       </div>
     </div>
   );

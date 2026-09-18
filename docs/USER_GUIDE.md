@@ -29,6 +29,12 @@ LMS nội bộ dùng để quản lý lớp, học viên, điểm danh, tiến �
 | `approved` | Đã duyệt — đăng nhập bình thường |
 | `disabled` | Bị khóa — không đăng nhập được |
 
+### Phiên đăng nhập hết hạn
+- Access token được làm mới tự động (khoảng mỗi phút / khi quay lại tab).
+- Nếu refresh thất bại hoặc API trả **401**, hệ thống **tự đăng xuất** và đưa về trang Đăng nhập.
+- API trả **403** (không đủ quyền) → trang **Không có quyền truy cập** (`/forbidden`), vẫn giữ phiên đăng nhập.
+- URL không tồn tại → trang **404**. Lỗi render nghiêm trọng → trang **500** (có nút Thử lại).
+
 ---
 
 ## 2. Vai trò Giáo viên (`teacher`)
@@ -38,6 +44,8 @@ Giáo viên **chỉ thấy / thao tác các lớp được gán** (trong danh s�
 ### Menu
 Tổng quan · Lớp học · Học viên · Điểm danh · Tiến độ · Đánh giá · Tra cứu HV · Thông báo · Hồ sơ cá nhân · Danh mục (nếu được cấp quyền)
 
+Trên màn hình nhỏ (dưới 768px), menu nằm trong **ngăn kéo (drawer)** — bấm nút menu góc trên trái để mở; chọn mục hoặc đổi trang sẽ tự đóng.
+
 ### Tổng quan
 - Số lớp đang hoạt động, học viên, buổi học hôm nay.
 - Tỷ lệ có mặt trong tháng (tính trên các ô **đã chấm**).
@@ -46,7 +54,7 @@ Tổng quan · Lớp học · Học viên · Điểm danh · Tiến độ · Đ�
 ### Lớp học
 **Tạo lớp**
 1. Bấm **Thêm lớp**.
-2. Điền mã lớp (bắt buộc), chọn **Chương trình** và **Khóa học** từ danh mục (cascade), lịch, giờ, phòng.
+2. Chọn **Chương trình** và **Khóa học** từ danh mục (cascade), lịch, giờ, phòng. **Mã lớp** được hệ thống tự tạo từ tên khóa học + số thứ tự (vd. `scratch_jr-01`).
 3. Chọn **ngày trong tuần** (CN–T7) — dùng để sinh buổi điểm danh.
 4. Lưu → lớp ở trạng thái **Đang hoạt động**.
 
@@ -59,18 +67,22 @@ Tổng quan · Lớp học · Học viên · Điểm danh · Tiến độ · Đ�
 
 **Kết thúc lớp:** nút **Kết thúc lớp** (`active` → `ended`). Giáo viên **không** đổi status qua dropdown (chỉ Admin).
 
+**Chỉnh sửa lớp:** lớp `active` có thể sửa chương trình, khóa học, lịch, phòng, ngày trong tuần (nút bút chì trên danh sách). **Mã lớp không đổi**. Lớp khóa (`inactive` / `ended`) không sửa được.
+
 **Lớp khóa (`inactive` / `ended`):** không thêm/sửa học viên, điểm danh, tiến độ, đánh giá.
 
 **Sĩ số:** tối thiểu khuyến nghị 5, tối đa 15 học viên / lớp.
 
 ### Học viên
-- Học viên là **master** (dùng chung nhiều lớp). Trong lớp: **enroll** HV có sẵn hoặc **Thêm HV mới** (cần quyền `manage_students`).
+- Học viên là **master** (dùng chung nhiều lớp). Trang **Học viên**: tìm, lọc theo lớp; **Thêm / Sửa / Xóa** hồ sơ (cần quyền `manage_students`, Admin luôn được).
+- Trong lớp: **enroll** HV có sẵn hoặc **Thêm HV mới** (cần quyền `manage_students`).
 - Trạng thái theo enrollment (danh mục): `active` / `reserved` / `dropped` (và các mục Admin/GV được cấp quyền thêm).
 - Không enroll trùng cùng HV trong một lớp.
 
 ### Danh mục
 - Menu **Danh mục** (Admin luôn thấy; Teacher thấy nếu được cấp ≥1 quyền).
-- Tab: Chương trình · Khóa học · Học viên master · Trạng thái HV · Mức tiếp thu.
+- Tab: Chương trình · Khóa học · Trạng thái HV · Mức tiếp thu.
+- **Mã** tự sinh từ tên khi thêm mới; không sửa mã sau khi tạo.
 - Mục hệ thống (`is_system`) không xóa được; có thể soft-disable `is_active`.
 
 ### Điểm danh

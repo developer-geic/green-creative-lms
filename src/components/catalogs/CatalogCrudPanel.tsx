@@ -49,14 +49,12 @@ export function CatalogCrudPanel({
   onChanged: () => void;
 }) {
   const [pending, startTransition] = useTransition();
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [programId, setProgramId] = useState("");
   const [color, setColor] = useState("");
   const [editing, setEditing] = useState<LmsCatalogItem | null>(null);
 
   function resetForm() {
-    setCode("");
     setName("");
     setProgramId("");
     setColor("");
@@ -65,7 +63,6 @@ export function CatalogCrudPanel({
 
   function startEdit(item: LmsCatalogItem) {
     setEditing(item);
-    setCode(item.code);
     setName(item.name);
     setProgramId(item.program_id ? String(item.program_id) : "");
     setColor(item.color || "");
@@ -76,7 +73,6 @@ export function CatalogCrudPanel({
     startTransition(async () => {
       try {
         const body: Record<string, unknown> = {
-          code,
           name,
           is_active: true,
         };
@@ -133,16 +129,18 @@ export function CatalogCrudPanel({
   return (
     <div className="space-y-4">
       <form onSubmit={submit} className="card grid gap-3 md:grid-cols-2">
+        {editing ? (
+          <div className="flex flex-col gap-1 md:col-span-2">
+            <label className="text-xs font-semibold text-on-surface-variant">Mã (không đổi)</label>
+            <input className="input font-mono text-xs" value={editing.code} disabled readOnly />
+          </div>
+        ) : (
+          <p className="text-xs text-on-surface-variant md:col-span-2">
+            Mã được tạo tự động từ tên hiển thị.
+          </p>
+        )}
         <input
-          className="input"
-          required
-          placeholder="Mã (code)"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          disabled={!!editing?.is_system}
-        />
-        <input
-          className="input"
+          className="input md:col-span-2"
           required
           placeholder="Tên hiển thị"
           value={name}

@@ -80,3 +80,29 @@ export type LmsStudent = {
     status_name?: string | null;
   }>;
 };
+
+export type StatsSummary = {
+  total_classes: number;
+  active_classes: number;
+  ended_classes: number;
+  inactive_classes: number;
+  total_students: number;
+  attendance_sessions: number | null;
+  has_time_filter: boolean;
+};
+
+export type StatsByTeacher = {
+  teacher_id: number | null;
+  teacher_name: string;
+  classes: number;
+  active: number;
+  ended: number;
+  inactive: number;
+  students: number;
+  students_active: number;
+};
+
+export type StatsPayload = {
+  summary: StatsSummary;
+  by_teacher: StatsByTeacher[];
+};

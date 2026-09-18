@@ -18,5 +18,7 @@ export const config = {
     "/stats/:path*",
     "/users/:path*",
     "/import/:path*",
+    "/catalogs/:path*",
+    "/forbidden",
   ],
 };

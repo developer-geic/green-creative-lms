@@ -95,12 +95,12 @@ export default function DashboardPage() {
               Chúc một ngày giảng dạy tràn đầy cảm hứng và hiệu quả tại Sáng Tạo Xanh.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/attendance" className="btn btn-ghost">
+          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto">
+            <Link href="/attendance" className="btn btn-ghost w-full sm:w-auto">
               <CheckCircle2 className="h-4 w-4" />
               Điểm danh nhanh
             </Link>
-            <Link href="/classes" className="btn btn-primary">
+            <Link href="/classes" className="btn btn-primary w-full sm:w-auto">
               <Plus className="h-4 w-4" />
               Thêm lớp mới
             </Link>

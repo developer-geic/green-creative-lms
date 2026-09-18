@@ -8,14 +8,28 @@ import { lmsApi } from "@/lib/api";
 import { buildQuery, cn } from "@/lib/utils";
 
 const ATT_OPTIONS = [
-  { value: "", label: "— Trống —", className: "bg-surface-low text-on-surface-variant" },
-  { value: "present", label: "✓ Có mặt", className: "bg-[#ecfdf5] text-[#065f46]" },
-  { value: "excused", label: "✉ Có phép", className: "bg-[#fffbeb] text-[#92400e]" },
-  { value: "unexcused", label: "✕ Không phép", className: "bg-[#fef2f2] text-[#991b1b]" },
+  { value: "", label: "- Trống -", className: "bg-surface-low text-on-surface-variant" },
+  { value: "present", label: "Có mặt", className: "bg-[#ecfdf5] text-[#065f46]" },
+  { value: "excused", label: "Có phép", className: "bg-[#fffbeb] text-[#92400e]" },
+  { value: "unexcused", label: "Không phép", className: "bg-[#fef2f2] text-[#991b1b]" },
 ];
+
+const WEEKDAY_VI = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"] as const;
 
 function optionClass(status: string) {
   return ATT_OPTIONS.find((o) => o.value === status)?.className || ATT_OPTIONS[0].className;
+}
+
+/** Parse YYYY-MM-DD as local calendar day (avoid UTC shift). */
+function formatSessionHeader(iso: string) {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return {
+    weekday: WEEKDAY_VI[date.getDay()],
+    day: String(d).padStart(2, "0"),
+    month: String(m).padStart(2, "0"),
+    year: String(y),
+  };
 }
 
 function AttendanceContent() {
@@ -199,45 +213,75 @@ function AttendanceContent() {
 
       {data?.class?.is_locked ? (
         <div className="rounded-lg bg-[#fffbeb] px-3 py-2 text-sm text-[#92400e]">
-          Lớp đã khóa — chỉ xem, không ghi điểm danh mới.
+          Lớp đã khóa - chỉ xem, không ghi điểm danh mới.
         </div>
       ) : null}
 
       {data ? (
-        <div className="flex flex-col overflow-hidden rounded-xl bg-surface shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-low/40 p-4">
-            <div className="flex items-center gap-2">
-              <div className="h-5 w-2 rounded-full bg-primary" />
-              <h2 className="text-lg font-semibold text-foreground">Ma trận điểm danh học viên</h2>
-              <span className="rounded bg-surface-high px-2 py-0.5 text-[11px] text-on-surface-variant">
-                Sĩ số: {data.grid?.length || 0} học viên
+        <div className="flex flex-col overflow-hidden rounded-2xl border border-primary/10 bg-surface shadow-[0_8px_24px_rgba(0,105,72,0.06)]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-primary/10 bg-gradient-to-r from-primary/[0.06] to-transparent px-4 py-3.5 sm:px-5">
+            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+              <div className="h-5 w-1.5 shrink-0 rounded-full bg-primary" />
+              <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                Lịch điểm danh
+              </h2>
+              <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary-dark">
+                {data.grid?.length || 0} học viên
               </span>
             </div>
+            <p className="text-xs text-on-surface-variant md:hidden">Vuốt ngang để xem buổi</p>
           </div>
+
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px] border-collapse text-left text-sm">
-              <thead className="bg-surface-low text-xs font-semibold text-on-surface-variant">
+            <table className="w-full min-w-[880px] border-collapse text-sm">
+              <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 bg-surface-low px-4 py-3">Học viên</th>
-                  {(data.dates || []).map((d) => (
-                    <th key={d} className="min-w-[124px] px-2 py-3 text-center">
-                      <span className="block font-semibold text-foreground">{d.slice(5)}</span>
-                      <span className="font-normal">{d.slice(0, 4)}</span>
-                    </th>
-                  ))}
-                  <th className="bg-surface-high px-4 py-3 text-center">Tổng kết</th>
+                  <th className="sticky left-0 z-20 min-w-[200px] bg-primary-dark px-4 py-3.5 text-left shadow-[4px_0_12px_rgba(0,81,55,0.18)]">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-on-primary/80">
+                      Học viên
+                    </span>
+                  </th>
+                  {(data.dates || []).map((d) => {
+                    const h = formatSessionHeader(d);
+                    return (
+                      <th
+                        key={d}
+                        className="min-w-[118px] bg-primary px-2 py-3 text-center text-on-primary"
+                      >
+                        <span className="block text-[11px] font-bold uppercase tracking-wide text-primary-soft">
+                          {h.weekday}
+                        </span>
+                        <span className="mt-0.5 block text-sm font-semibold leading-tight">
+                          {h.day}/{h.month}
+                        </span>
+                        <span className="block text-[10px] font-medium text-on-primary/75">
+                          {h.year}
+                        </span>
+                      </th>
+                    );
+                  })}
+                  <th className="min-w-[88px] bg-primary-container px-3 py-3.5 text-center text-on-primary">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-on-primary/85">
+                      % Có mặt
+                    </span>
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-surface-low/50">
+              <tbody>
                 {(data.grid || []).map((row, idx) => (
-                  <tr key={row.student.id} className="transition-colors hover:bg-surface-low/40">
-                    <td className="sticky left-0 z-10 bg-surface px-4 py-2.5 font-semibold">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-surface-high text-[11px] font-bold">
+                  <tr
+                    key={row.student.id}
+                    className="group border-b border-surface-low transition-colors last:border-b-0 hover:bg-primary/[0.03]"
+                  >
+                    <td className="sticky left-0 z-10 bg-surface px-4 py-3 shadow-[4px_0_12px_rgba(0,0,0,0.04)] group-hover:bg-[#f7fbf9]">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft/60 text-[11px] font-bold text-primary-dark">
                           {String(idx + 1).padStart(2, "0")}
                         </div>
-                        <div>
-                          <div>{row.student.full_name}</div>
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold text-foreground">
+                            {row.student.full_name}
+                          </div>
                           {row.student.code ? (
                             <div className="font-mono text-[11px] text-primary">{row.student.code}</div>
                           ) : null}
@@ -249,8 +293,9 @@ function AttendanceContent() {
                       return (
                         <td key={d} className="px-1.5 py-2.5 text-center">
                           <select
+                            aria-label={`Điểm danh ${row.student.full_name} ngày ${d}`}
                             className={cn(
-                              "h-8 w-full cursor-pointer rounded text-center text-[11px] font-semibold outline-none",
+                              "h-9 w-full cursor-pointer rounded-lg border border-transparent text-center text-[11px] font-semibold outline-none transition-shadow focus:border-primary/30 focus:ring-2 focus:ring-primary/20",
                               optionClass(status),
                             )}
                             disabled={data.class?.is_locked}
@@ -266,8 +311,21 @@ function AttendanceContent() {
                         </td>
                       );
                     })}
-                    <td className="bg-surface-low/50 px-4 py-2.5 text-center text-[11px] font-semibold">
-                      {row.stats?.rate == null ? "—" : `${row.stats.rate}%`}
+                    <td className="bg-surface-low/40 px-3 py-3 text-center">
+                      <span
+                        className={cn(
+                          "inline-flex min-w-[3rem] items-center justify-center rounded-md px-2 py-1 text-xs font-bold tabular-nums",
+                          row.stats?.rate == null
+                            ? "bg-surface-high text-on-surface-variant"
+                            : row.stats.rate >= 80
+                              ? "bg-[#ecfdf5] text-[#065f46]"
+                              : row.stats.rate >= 50
+                                ? "bg-[#fffbeb] text-[#92400e]"
+                                : "bg-[#fef2f2] text-[#991b1b]",
+                        )}
+                      >
+                        {row.stats?.rate == null ? "-" : `${row.stats.rate}%`}
+                      </span>
                     </td>
                   </tr>
                 ))}

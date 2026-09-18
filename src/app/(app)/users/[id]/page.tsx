@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, notFound } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CatalogPermissionEditor } from "@/components/catalogs/CatalogPermissionEditor";
@@ -10,9 +10,19 @@ export default function UserDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const [data, setData] = useState<any>(null);
+  const [missing, setMissing] = useState(false);
 
   function load() {
-    lmsApi.userDetail(id).then((res) => setData(res.data)).catch((e) => toast.error(e.message));
+    lmsApi
+      .userDetail(id)
+      .then((res) => setData(res.data))
+      .catch((e) => {
+        if (e?.statusCode === 404) {
+          setMissing(true);
+          return;
+        }
+        toast.error(e.message);
+      });
   }
 
   useEffect(() => {
@@ -27,6 +37,10 @@ export default function UserDetailPage() {
     } catch (e: any) {
       toast.error(e.message);
     }
+  }
+
+  if (missing) {
+    notFound();
   }
 
   if (!data) return <div>Đang tải...</div>;

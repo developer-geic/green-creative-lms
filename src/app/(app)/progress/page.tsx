@@ -74,67 +74,106 @@ function ProgressContent() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-primary-dark">Tiến độ học tập</h1>
       <div className="card flex flex-wrap gap-3">
-        <select className="input max-w-xs" value={classId} onChange={(e) => setClassId(e.target.value)}>
-          {classes.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
+        <select
+          className="input w-full sm:max-w-xs"
+          value={classId}
+          onChange={(e) => setClassId(e.target.value)}
+        >
+          {classes.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.code}
+            </option>
+          ))}
         </select>
-        <select className="input max-w-[120px]" value={year} onChange={(e) => setYear(Number(e.target.value))}>
-          {[year - 1, year, year + 1].map((y) => <option key={y} value={y}>{y}</option>)}
+        <select
+          className="input w-full sm:max-w-[120px]"
+          value={year}
+          onChange={(e) => setYear(Number(e.target.value))}
+        >
+          {[year - 1, year, year + 1].map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
         </select>
-        <select className="input max-w-[120px]" value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>Tháng {m}</option>)}
+        <select
+          className="input w-full sm:max-w-[120px]"
+          value={month}
+          onChange={(e) => setMonth(Number(e.target.value))}
+        >
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+            <option key={m} value={m}>
+              Tháng {m}
+            </option>
+          ))}
         </select>
-        <button className="btn btn-primary" onClick={() => load()}>Xem</button>
+        <button className="btn btn-primary w-full sm:w-auto" onClick={() => load()}>
+          Xem
+        </button>
       </div>
 
       {data && (
-        <div className="card overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
-            <thead>
-              <tr className="border-b border-border text-slate-500">
-                <th className="py-2 text-left">Học viên</th>
-                {(data.dates || []).map((d: string) => <th key={d}>{d.slice(5)}</th>)}
-                <th>BTVN</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(data.grid || []).map((row: any) => (
-                <tr key={row.student.id} className="border-b border-border/70">
-                  <td className="py-2 font-medium">{row.student.full_name}</td>
-                  {(data.dates || []).map((d: string) => {
-                    const cell = row.cells?.[d] || {};
-                    return (
-                      <td key={d} className="space-y-1 p-1">
-                        <select
-                          className="input !py-1 text-xs"
-                          disabled={data.class.is_locked}
-                          value={cell.homework || ""}
-                          onChange={(e) => saveCell(row.student.id, d, e.target.value, cell.absorption || "")}
-                        >
-                          <option value="">BTVN</option>
-                          <option value="done">Hoàn thành</option>
-                          <option value="missing">Chưa HT</option>
-                        </select>
-                        <select
-                          className="input !py-1 text-xs"
-                          disabled={data.class.is_locked}
-                          value={cell.absorption || ""}
-                          onChange={(e) => saveCell(row.student.id, d, cell.homework || "", e.target.value)}
-                        >
-                          <option value="">Tiếp thu</option>
-                          {absorptionLevels.map((level) => (
-                            <option key={level.id} value={level.code}>
-                              {level.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                    );
-                  })}
-                  <td>{row.stats?.rate == null ? "—" : `${row.stats.rate}%`}</td>
+        <div className="card !p-0 overflow-hidden">
+          <p className="px-4 pt-3 text-xs text-on-surface-variant md:hidden">
+            Vuốt ngang để xem buổi
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-slate-500">
+                  <th className="sticky left-0 z-10 bg-surface px-3 py-2 text-left">Học viên</th>
+                  {(data.dates || []).map((d: string) => (
+                    <th key={d}>{d.slice(5)}</th>
+                  ))}
+                  <th>BTVN</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(data.grid || []).map((row: any) => (
+                  <tr key={row.student.id} className="border-b border-border/70">
+                    <td className="sticky left-0 z-10 bg-surface px-3 py-2 font-medium">
+                      {row.student.full_name}
+                    </td>
+                    {(data.dates || []).map((d: string) => {
+                      const cell = row.cells?.[d] || {};
+                      return (
+                        <td key={d} className="space-y-1 p-1">
+                          <select
+                            className="input !py-1 text-xs"
+                            disabled={data.class.is_locked}
+                            value={cell.homework || ""}
+                            onChange={(e) =>
+                              saveCell(row.student.id, d, e.target.value, cell.absorption || "")
+                            }
+                          >
+                            <option value="">BTVN</option>
+                            <option value="done">Hoàn thành</option>
+                            <option value="missing">Chưa HT</option>
+                          </select>
+                          <select
+                            className="input !py-1 text-xs"
+                            disabled={data.class.is_locked}
+                            value={cell.absorption || ""}
+                            onChange={(e) =>
+                              saveCell(row.student.id, d, cell.homework || "", e.target.value)
+                            }
+                          >
+                            <option value="">Tiếp thu</option>
+                            {absorptionLevels.map((level) => (
+                              <option key={level.id} value={level.code}>
+                                {level.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      );
+                    })}
+                    <td>{row.stats?.rate == null ? "—" : `${row.stats.rate}%`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
       {/* silence unused */}
