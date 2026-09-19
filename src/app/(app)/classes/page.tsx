@@ -90,6 +90,8 @@ function ClassesContent() {
     room: "",
     days: [] as number[],
     teacher_ids: [] as number[],
+    min_class_size: "5",
+    max_class_size: "15",
   });
 
   const modalOpen = showCreate || editing != null;
@@ -101,6 +103,8 @@ function ClassesContent() {
     room: "",
     days: [] as number[],
     teacher_ids: [] as number[],
+    min_class_size: "5",
+    max_class_size: "15",
   };
 
   const { items: programs } = useCatalog("programs");
@@ -242,6 +246,8 @@ function ClassesContent() {
       room: c.room || "",
       days: Array.isArray(c.days) ? [...c.days] : [],
       teacher_ids: (c.teachers || []).map((t) => t.lms_user_id),
+      min_class_size: String(c.min_class_size ?? 5),
+      max_class_size: String(c.max_class_size ?? 15),
     });
   }
 
@@ -262,6 +268,8 @@ function ClassesContent() {
       time: form.time || null,
       room: form.room || null,
       days: form.days,
+      min_class_size: form.min_class_size ? Number(form.min_class_size) : 5,
+      max_class_size: form.max_class_size ? Number(form.max_class_size) : 15,
     };
     if (isAdmin) {
       body.teachers = form.teacher_ids.map((lms_user_id) => ({
@@ -276,6 +284,16 @@ function ClassesContent() {
     if (!isAdmin) return;
     if (!form.teacher_ids.length) {
       toast.error("Chọn ít nhất một giáo viên phụ trách lớp");
+      return;
+    }
+    const min = Number(form.min_class_size);
+    const max = Number(form.max_class_size);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min < 1 || max < 1) {
+      toast.error("Sĩ số tối thiểu / tối đa không hợp lệ");
+      return;
+    }
+    if (max < min) {
+      toast.error("Sĩ số tối đa phải ≥ sĩ số tối thiểu");
       return;
     }
     try {
@@ -293,6 +311,16 @@ function ClassesContent() {
     if (editing) {
       if (isAdmin && !form.teacher_ids.length) {
         toast.error("Chọn ít nhất một giáo viên phụ trách lớp");
+        return;
+      }
+      const min = Number(form.min_class_size);
+      const max = Number(form.max_class_size);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min < 1 || max < 1) {
+        toast.error("Sĩ số tối thiểu / tối đa không hợp lệ");
+        return;
+      }
+      if (max < min) {
+        toast.error("Sĩ số tối đa phải ≥ sĩ số tối thiểu");
         return;
       }
       setPendingAction({ type: "update" });
@@ -437,7 +465,7 @@ function ClassesContent() {
           <div className="flex flex-col">
             <span className="text-xs text-on-surface-variant">Tỷ lệ lấp đầy TB</span>
             <span className="mt-1 text-2xl font-semibold text-foreground">{counts.avgFill}%</span>
-            <span className="mt-1 text-[11px] font-semibold text-primary">Chuẩn 5 - 15 HV/lớp</span>
+            <span className="mt-1 text-[11px] font-semibold text-primary">Theo sĩ số tối đa từng lớp</span>
           </div>
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-low text-secondary">
             <UserCheck className="h-6 w-6" />
@@ -524,7 +552,7 @@ function ClassesContent() {
                 <th className="whitespace-nowrap px-4 py-3">Khóa học & Chương trình</th>
                 <th className="whitespace-nowrap px-4 py-3">Lịch học</th>
                 <th className="whitespace-nowrap px-4 py-3">Phòng học</th>
-                <th className="whitespace-nowrap px-4 py-3 w-44">Sĩ số (Chuẩn 5-15)</th>
+                <th className="whitespace-nowrap px-4 py-3 w-44">Sĩ số</th>
                 <th className="whitespace-nowrap px-4 py-3 text-center">Trạng thái</th>
                 <th className="whitespace-nowrap px-4 py-3 pr-6 text-right">Hành động</th>
               </tr>
@@ -579,7 +607,9 @@ function ClassesContent() {
                           />
                         </div>
                         {c.below_min_size ? (
-                          <span className="text-[11px] text-warn">Chưa đủ tối thiểu 5</span>
+                          <span className="text-[11px] text-warn">
+                            Chưa đủ tối thiểu {c.min_class_size ?? 5}
+                          </span>
                         ) : null}
                       </div>
                     </td>
@@ -775,6 +805,36 @@ function ClassesContent() {
                     value={form.room}
                     onChange={(e) => setForm({ ...form, room: e.target.value })}
                   />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-foreground">
+                      Sĩ số tối thiểu
+                    </label>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      max={100}
+                      required
+                      value={form.min_class_size}
+                      onChange={(e) => setForm({ ...form, min_class_size: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-foreground">
+                      Sĩ số tối đa
+                    </label>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      max={100}
+                      required
+                      value={form.max_class_size}
+                      onChange={(e) => setForm({ ...form, max_class_size: e.target.value })}
+                    />
+                  </div>
                 </div>
               </div>
               <div className="flex flex-col gap-2">

@@ -1,9 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
+import { FormEvent, useEffect, useState, useTransition } from "react";
 import { useSession } from "next-auth/react";
 import {
-  Camera,
   History,
   Mail,
   Phone,
@@ -12,8 +11,8 @@ import {
   UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AvatarEditor, pickAvatarPath } from "@/components/AvatarEditor";
 import { lmsApi } from "@/lib/api";
-import { avatarSrc } from "@/lib/avatar";
 import { cn } from "@/lib/utils";
 import type { LmsUser } from "@/types/lms";
 
@@ -70,7 +69,6 @@ function profileToForm(profile: Record<string, unknown> | null | undefined): Pro
 
 export default function ProfilePage() {
   const { data: session, update: updateSession } = useSession();
-  const fileRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<TabId>("pedagogy");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<LmsUser | null>(null);
@@ -100,7 +98,12 @@ export default function ProfilePage() {
         setBaseline(nextForm);
         setDirectEditAvailable(!!profileRes.data?.direct_edit_available);
         setPendingRequest(profileRes.data?.pending_request || null);
-        setAvatarPath(profile?.avatar || u?.avatar || null);
+        setAvatarPath(
+          pickAvatarPath(profile) ||
+            pickAvatarPath(u) ||
+            (typeof profile?.avatar === "string" ? profile.avatar : null) ||
+            (typeof u?.avatar === "string" ? u.avatar : null),
+        );
       })
       .catch((e) => toast.error(e.message || "Không tải được hồ sơ"))
       .finally(() => setLoading(false));
@@ -144,12 +147,11 @@ export default function ProfilePage() {
     });
   }
 
-  function onAvatarPick(file?: File | null) {
-    if (!file) return;
+  function onAvatarPick(file: File) {
     startAvatarSave(async () => {
       try {
         const res = await lmsApi.uploadAvatar(file);
-        const nextAvatar = res.data?.avatar || res.data?.user?.avatar;
+        const nextAvatar = pickAvatarPath(res.data) || pickAvatarPath(res);
         if (nextAvatar) setAvatarPath(nextAvatar);
         toast.success("Đã cập nhật ảnh đại diện");
         await updateSession?.();
@@ -189,7 +191,6 @@ export default function ProfilePage() {
   const email =
     user?.email || (session?.user as { email?: string } | undefined)?.email || "";
   const role = user?.role;
-  const avatar = avatarSrc(avatarPath);
   const pendingCount = pendingRequest ? 1 : 0;
 
   const tabs: Array<{ id: TabId; label: string; icon: typeof UserRound; badge?: number }> = [
@@ -287,37 +288,13 @@ export default function ProfilePage() {
         <div className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
         <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="relative group">
-              <div className="h-28 w-28 overflow-hidden rounded-2xl bg-surface-low shadow-md sm:h-32 sm:w-32">
-                {avatar ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={avatar} alt={displayName} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-primary">
-                    {displayName.slice(0, 1).toUpperCase()}
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                className="absolute -bottom-2 -right-2 flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-on-primary shadow-md transition-transform hover:scale-105 disabled:opacity-60"
-                title="Đổi ảnh đại diện"
-                disabled={avatarSaving}
-                onClick={() => fileRef.current?.click()}
-              >
-                <Camera className="h-4 w-4" />
-              </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/jpg"
-                className="hidden"
-                onChange={(e) => {
-                  onAvatarPick(e.target.files?.[0]);
-                  e.target.value = "";
-                }}
-              />
-            </div>
+            <AvatarEditor
+              path={avatarPath}
+              name={displayName}
+              saving={avatarSaving}
+              onPick={onAvatarPick}
+              size="lg"
+            />
             <div className="flex flex-col gap-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-bold text-foreground sm:text-2xl">{displayName}</h2>
@@ -341,6 +318,10 @@ export default function ProfilePage() {
                   </span>
                 ) : null}
               </div>
+              <p className="text-xs text-on-surface-variant">
+                JPEG / PNG / WebP, tối đa 2MB
+                {avatarSaving ? " · Đang tải..." : ""}
+              </p>
             </div>
           </div>
         </div>

@@ -1,25 +1,36 @@
 "use client";
 
 import { useParams, notFound } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
-import { Camera, UserRound } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { AvatarEditor, pickAvatarPath } from "@/components/AvatarEditor";
 import { CatalogPermissionEditor } from "@/components/catalogs/CatalogPermissionEditor";
 import { lmsApi } from "@/lib/api";
-import { avatarSrc } from "@/lib/avatar";
 
 export default function UserDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const fileRef = useRef<HTMLInputElement>(null);
   const [data, setData] = useState<any>(null);
   const [missing, setMissing] = useState(false);
+  const [avatarPath, setAvatarPath] = useState<string | null>(null);
   const [avatarSaving, startAvatarSave] = useTransition();
+
+  function applyAvatarFromPayload(payload: any) {
+    const path =
+      pickAvatarPath(payload?.user) ||
+      pickAvatarPath(payload?.teacher_profile) ||
+      pickAvatarPath(payload) ||
+      null;
+    setAvatarPath(path);
+  }
 
   function load() {
     lmsApi
       .userDetail(id)
-      .then((res) => setData(res.data))
+      .then((res) => {
+        setData(res.data);
+        applyAvatarFromPayload(res.data);
+      })
       .catch((e) => {
         if (e?.statusCode === 404) {
           setMissing(true);
@@ -43,12 +54,12 @@ export default function UserDetailPage() {
     }
   }
 
-  function onAvatarPick(file?: File | null) {
-    if (!file) return;
+  function onAvatarPick(file: File) {
     startAvatarSave(async () => {
       try {
         const res = await lmsApi.uploadUserAvatar(id, file);
-        const nextAvatar = res.data?.avatar || res.data?.user?.avatar;
+        const nextAvatar = pickAvatarPath(res.data) || pickAvatarPath(res);
+        if (nextAvatar) setAvatarPath(nextAvatar);
         toast.success("Đã cập nhật ảnh đại diện");
         setData((prev: any) => ({
           ...prev,
@@ -73,45 +84,22 @@ export default function UserDetailPage() {
 
   if (!data) return <div>Đang tải...</div>;
 
-  const avatar = avatarSrc(data.user?.avatar || data.teacher_profile?.avatar);
+  const displayName = data.user?.name || data.user?.email || "Người dùng";
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full bg-surface-low">
-          {avatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatar} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-on-surface-variant">
-              <UserRound className="h-8 w-8" />
-            </div>
-          )}
-          <button
-            type="button"
-            className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-on-primary shadow disabled:opacity-60"
-            title="Đổi ảnh đại diện"
-            disabled={avatarSaving}
-            onClick={() => fileRef.current?.click()}
-          >
-            <Camera className="h-3.5 w-3.5" />
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/jpg"
-            className="hidden"
-            onChange={(e) => onAvatarPick(e.target.files?.[0])}
-          />
-        </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <AvatarEditor
+          path={avatarPath}
+          name={displayName}
+          saving={avatarSaving}
+          onPick={onAvatarPick}
+          size="md"
+          hint="JPEG / PNG / WebP, tối đa 2MB"
+        />
         <div>
-          <h1 className="text-2xl font-bold text-primary-dark">
-            {data.user?.name || data.user?.email}
-          </h1>
-          <p className="text-xs text-on-surface-variant">
-            JPEG / PNG / WebP, tối đa 2MB
-            {avatarSaving ? " · Đang tải..." : ""}
-          </p>
+          <h1 className="text-2xl font-bold text-primary-dark">{displayName}</h1>
+          <p className="text-sm text-on-surface-variant">{data.user?.email}</p>
         </div>
       </div>
 

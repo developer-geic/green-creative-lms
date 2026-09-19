@@ -3,16 +3,20 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AvatarThumb } from "@/components/AvatarEditor";
 import { lmsApi } from "@/lib/api";
 
 export default function UsersPage() {
-  const [items, setItems] = useState<Array<{
-    id: number;
-    name?: string;
-    email: string;
-    role: string;
-    status: string;
-  }>>([]);
+  const [items, setItems] = useState<
+    Array<{
+      id: number;
+      name?: string;
+      email: string;
+      role: string;
+      status: string;
+      avatar?: string | null;
+    }>
+  >([]);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("teacher");
@@ -100,9 +104,12 @@ export default function UsersPage() {
                 key={u.id}
                 className="flex flex-col justify-between rounded-xl bg-surface-low p-4"
               >
-                <div>
-                  <div className="font-bold text-foreground">{u.name || "—"}</div>
-                  <div className="text-xs text-on-surface-variant">{u.email}</div>
+                <div className="flex items-center gap-3">
+                  <AvatarThumb path={u.avatar} name={u.name || u.email} size="sm" />
+                  <div>
+                    <div className="font-bold text-foreground">{u.name || "—"}</div>
+                    <div className="text-xs text-on-surface-variant">{u.email}</div>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -132,17 +139,22 @@ export default function UsersPage() {
               {others.map((u) => (
                 <tr key={u.id} className="transition-colors hover:bg-surface-low/50">
                   <td className="px-4 py-3">
-                    {u.role === "teacher" ? (
-                      <Link
-                        className="font-semibold hover:text-primary"
-                        href={`/users/${u.id}`}
-                      >
-                        {u.name || "—"}
-                      </Link>
-                    ) : (
-                      <span className="font-semibold">{u.name || "—"}</span>
-                    )}
-                    <div className="text-xs text-on-surface-variant">{u.email}</div>
+                    <div className="flex items-center gap-2.5">
+                      <AvatarThumb path={u.avatar} name={u.name || u.email} size="sm" />
+                      <div>
+                        {u.role === "teacher" ? (
+                          <Link
+                            className="font-semibold hover:text-primary"
+                            href={`/users/${u.id}`}
+                          >
+                            {u.name || "—"}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold">{u.name || "—"}</span>
+                        )}
+                        <div className="text-xs text-on-surface-variant">{u.email}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className="pill pill-good">{u.role}</span>
