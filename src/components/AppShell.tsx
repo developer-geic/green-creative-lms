@@ -28,13 +28,14 @@ import { cn } from "@/lib/utils";
 import { lmsApi } from "@/lib/api";
 import type { CatalogPermissions } from "@/types/lms";
 
-const TEACHER_NAV = [
+const TEACHER_NAV_BASE = [
   { href: "/dashboard", label: "Tổng quan", icon: LayoutDashboard },
-  { href: "/classes", label: "Lớp học", icon: BookOpen },
   { href: "/attendance", label: "Điểm danh", icon: CalendarCheck },
   { href: "/progress", label: "Tiến độ & Đánh giá", icon: ClipboardList },
   { href: "/students", label: "Học viên & Tra cứu", icon: GraduationCap },
 ] as const;
+
+const CLASSES_NAV = { href: "/classes", label: "Lớp học", icon: BookOpen } as const;
 
 const ADMIN_NAV = [
   { href: "/users", label: "Quản trị Người dùng", icon: Users },
@@ -115,6 +116,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [mobileNavOpen]);
 
   const showCatalogs = canAccessCatalogs(isAdmin, catalogPerms);
+  const showClasses = isAdmin || !!catalogPerms?.manage_classes;
+  const teacherNav = showClasses
+    ? [
+        TEACHER_NAV_BASE[0],
+        CLASSES_NAV,
+        TEACHER_NAV_BASE[1],
+        TEACHER_NAV_BASE[2],
+        TEACHER_NAV_BASE[3],
+      ]
+    : [...TEACHER_NAV_BASE];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -137,9 +148,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col overflow-hidden">
           <div className="flex h-16 items-center justify-between gap-2 px-4 md:px-6">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-on-primary">
-                ST
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/logo.jpg"
+                alt="Sáng Tạo Xanh"
+                className="h-9 w-9 shrink-0 rounded-lg object-contain"
+              />
               <div className="flex flex-col">
                 <span className="text-base font-semibold leading-tight text-primary">Sáng Tạo Xanh</span>
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">
@@ -172,7 +186,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="flex max-h-[calc(100vh-140px)] flex-col gap-1 overflow-y-auto px-4 py-2">
-            {TEACHER_NAV.map((item) => (
+            {teacherNav.map((item) => (
               <NavItem key={item.href} {...item} pathname={pathname} />
             ))}
             {showCatalogs || isAdmin ? <div className="mx-2 my-1 h-px bg-surface-high" /> : null}

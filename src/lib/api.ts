@@ -96,6 +96,42 @@ export const lmsApi = {
       auth: false,
     }),
   me: () => lmsFetch("/lms/auth/me"),
+  uploadAvatar: (file: File) => {
+    const fd = new FormData();
+    fd.append("avatar", file);
+    return lmsFetch("/lms/auth/avatar", {
+      method: "POST",
+      body: fd,
+      formData: true,
+    });
+  },
+  uploadStudentAvatar: (id: number | string, file: File) => {
+    const fd = new FormData();
+    fd.append("avatar", file);
+    return lmsFetch(`/lms/students/${id}/avatar`, {
+      method: "POST",
+      body: fd,
+      formData: true,
+    });
+  },
+  uploadUserAvatar: (id: number | string, file: File) => {
+    const fd = new FormData();
+    fd.append("avatar", file);
+    return lmsFetch(`/lms/users/${id}/avatar`, {
+      method: "POST",
+      body: fd,
+      formData: true,
+    });
+  },
+  changePassword: (body: {
+    current_password: string;
+    password: string;
+    password_confirmation: string;
+  }) =>
+    lmsFetch("/lms/auth/change-password", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   dashboard: () => lmsFetch("/lms/dashboard"),
   classes: (query = "") => lmsFetch(`/lms/classes${query}`),
   classDetail: (id: number | string) => lmsFetch(`/lms/classes/${id}`),
@@ -105,6 +141,8 @@ export const lmsApi = {
     lmsFetch(`/lms/classes/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   endClass: (id: number | string) =>
     lmsFetch(`/lms/classes/${id}/end`, { method: "POST" }),
+  deleteClass: (id: number | string) =>
+    lmsFetch(`/lms/classes/${id}`, { method: "DELETE" }),
   updateClassStatus: (id: number | string, status: string) =>
     lmsFetch(`/lms/classes/${id}/status`, {
       method: "PUT",

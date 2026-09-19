@@ -1,12 +1,20 @@
 "use client";
 
-import { FormEvent, Suspense, useEffect, useState, useTransition } from "react";
+import {
+  FormEvent,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Pencil, Plus, Trash2, XCircle } from "lucide-react";
+import { Camera, Pencil, Plus, Trash2, UserRound, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { SearchField } from "@/components/SearchField";
 import { lmsApi } from "@/lib/api";
+import { avatarSrc } from "@/lib/avatar";
 import { buildQuery } from "@/lib/utils";
 import type { LmsClass, LmsStudent } from "@/types/lms";
 
@@ -23,17 +31,23 @@ function StudentFormModal({
   editing,
   pending,
   form,
+  avatarPreview,
   onChange,
+  onAvatarPick,
   onClose,
   onSubmit,
 }: {
   editing: LmsStudent | null;
   pending: boolean;
   form: StudentForm;
+  avatarPreview: string | null;
   onChange: (patch: Partial<StudentForm>) => void;
+  onAvatarPick: (file: File | null) => void;
   onClose: () => void;
   onSubmit: (e: FormEvent) => void;
 }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#213145]/40 p-4 backdrop-blur-sm">
       <form
@@ -65,6 +79,40 @@ function StudentFormModal({
           </button>
         </div>
         <div className="flex max-h-[85dvh] flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          <div className="flex items-center gap-4">
+            <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full bg-surface-low">
+              {avatarPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarPreview}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-on-surface-variant">
+                  <UserRound className="h-8 w-8" />
+                </div>
+              )}
+              <button
+                type="button"
+                className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-on-primary shadow"
+                title="Chọn ảnh"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Camera className="h-3.5 w-3.5" />
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/jpg"
+                className="hidden"
+                onChange={(e) => onAvatarPick(e.target.files?.[0] || null)}
+              />
+            </div>
+            <p className="text-xs text-on-surface-variant">
+              JPEG / PNG / WebP, tối đa 2MB. Ảnh lưu sau khi tạo hoặc khi lưu chỉnh sửa.
+            </p>
+          </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-foreground">
               Họ tên <span className="text-danger">*</span>
@@ -129,6 +177,8 @@ function StudentsContent() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<LmsStudent | null>(null);
   const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
+  const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   const modalOpen = showCreate || editing != null;
 
@@ -168,15 +218,22 @@ function StudentsContent() {
      
   }, []);
 
+  function resetAvatarState() {
+    setPendingAvatar(null);
+    setAvatarPreview(null);
+  }
+
   function closeModal() {
     setShowCreate(false);
     setEditing(null);
     setForm(EMPTY_FORM);
+    resetAvatarState();
   }
 
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
+    resetAvatarState();
     setShowCreate(true);
   }
 
@@ -189,10 +246,18 @@ function StudentsContent() {
       parent_phone: student.parent_phone || "",
       notes: student.notes || "",
     });
+    setPendingAvatar(null);
+    setAvatarPreview(avatarSrc(student.avatar));
   }
 
   function patchForm(patch: Partial<StudentForm>) {
     setForm((prev) => ({ ...prev, ...patch }));
+  }
+
+  function onAvatarPick(file: File | null) {
+    if (!file) return;
+    setPendingAvatar(file);
+    setAvatarPreview(URL.createObjectURL(file));
   }
 
   function saveStudent(e: FormEvent) {
@@ -207,9 +272,16 @@ function StudentsContent() {
       try {
         if (editing) {
           await lmsApi.updateStudent(editing.id, body);
+          if (pendingAvatar) {
+            await lmsApi.uploadStudentAvatar(editing.id, pendingAvatar);
+          }
           toast.success("Đã cập nhật học viên");
         } else {
-          await lmsApi.createStudent(body);
+          const res = await lmsApi.createStudent(body);
+          const created = res.data;
+          if (pendingAvatar && created?.id) {
+            await lmsApi.uploadStudentAvatar(created.id, pendingAvatar);
+          }
           toast.success("Đã thêm học viên");
         }
         closeModal();
@@ -294,40 +366,55 @@ function StudentsContent() {
               </tr>
             </thead>
             <tbody>
-              {items.map((s) => (
-                <tr key={s.id} className="border-b border-border/70">
-                  <td className="py-2 font-medium">{s.full_name}</td>
-                  <td className="text-slate-600">{s.english_name || "—"}</td>
-                  <td className="text-xs text-slate-600">
-                    {(s.enrollments || [])
-                      .map((e) => `${e.class_code || e.class_id} (${e.status_name || e.status})`)
-                      .join(", ") || "—"}
-                  </td>
-                  <td>{s.parent_phone || "—"}</td>
-                  {canManage || isAdmin ? (
-                    <td className="py-2 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
-                          title="Sửa"
-                          onClick={() => openEdit(s)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
-                          title="Xóa"
-                          onClick={() => removeStudent(s)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+              {items.map((s) => {
+                const thumb = avatarSrc(s.avatar);
+                return (
+                  <tr key={s.id} className="border-b border-border/70">
+                    <td className="py-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-low">
+                          {thumb ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={thumb} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <UserRound className="h-4 w-4 text-on-surface-variant" />
+                          )}
+                        </div>
+                        <span className="font-medium">{s.full_name}</span>
                       </div>
                     </td>
-                  ) : null}
-                </tr>
-              ))}
+                    <td className="text-slate-600">{s.english_name || "—"}</td>
+                    <td className="text-xs text-slate-600">
+                      {(s.enrollments || [])
+                        .map((e) => `${e.class_code || e.class_id} (${e.status_name || e.status})`)
+                        .join(", ") || "—"}
+                    </td>
+                    <td>{s.parent_phone || "—"}</td>
+                    {canManage || isAdmin ? (
+                      <td className="py-2 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
+                            title="Sửa"
+                            onClick={() => openEdit(s)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
+                            title="Xóa"
+                            onClick={() => removeStudent(s)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -340,7 +427,9 @@ function StudentsContent() {
           editing={editing}
           pending={pending}
           form={form}
+          avatarPreview={avatarPreview}
           onChange={patchForm}
+          onAvatarPick={onAvatarPick}
           onClose={closeModal}
           onSubmit={saveStudent}
         />

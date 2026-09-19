@@ -11,6 +11,7 @@ const LABELS: Array<{ key: keyof CatalogPermissions; label: string }> = [
   { key: "manage_students", label: "Thêm/sửa học viên" },
   { key: "manage_student_statuses", label: "Trạng thái HV" },
   { key: "manage_absorption_levels", label: "Mức tiếp thu" },
+  { key: "manage_classes", label: "Chỉnh sửa lớp học" },
 ];
 
 const EMPTY: CatalogPermissions = {
@@ -19,6 +20,7 @@ const EMPTY: CatalogPermissions = {
   manage_students: false,
   manage_student_statuses: false,
   manage_absorption_levels: false,
+  manage_classes: false,
 };
 
 export function CatalogPermissionEditor({

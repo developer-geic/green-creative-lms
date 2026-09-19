@@ -39,10 +39,14 @@ LMS nội bộ dùng để quản lý lớp, học viên, điểm danh, tiến �
 
 ## 2. Vai trò Giáo viên (`teacher`)
 
-Giáo viên **chỉ thấy / thao tác các lớp được gán** (trong danh sách giáo viên của lớp). Khi **tự tạo lớp**, hệ thống tự gán bạn làm giáo viên của lớp đó.
+Giáo viên **chỉ thấy / thao tác các lớp được gán** (trong danh sách giáo viên của lớp).
+
+- Tab **Lớp học** (sửa lịch/phòng, kết thúc lớp) chỉ hiện khi Admin cấp quyền **Chỉnh sửa lớp học** (`manage_classes`).
+- **Không** tự tạo lớp — chỉ Admin tạo và gán giáo viên.
+- **Điểm danh** và **Tiến độ** vẫn dùng được trên lớp đã gán, kể cả khi không có `manage_classes`.
 
 ### Menu
-Tổng quan · Lớp học · Học viên · Điểm danh · Tiến độ · Đánh giá · Tra cứu HV · Thông báo · Hồ sơ cá nhân · Danh mục (nếu được cấp quyền)
+Tổng quan · Lớp học (nếu có quyền) · Học viên · Điểm danh · Tiến độ · Đánh giá · Tra cứu HV · Thông báo · Hồ sơ cá nhân · Danh mục (nếu được cấp quyền)
 
 Trên màn hình nhỏ (dưới 768px), menu nằm trong **ngăn kéo (drawer)** — bấm nút menu góc trên trái để mở; chọn mục hoặc đổi trang sẽ tự đóng.
 
@@ -52,22 +56,25 @@ Trên màn hình nhỏ (dưới 768px), menu nằm trong **ngăn kéo (drawer)**
 - Danh sách học viên nghỉ không phép gần đây.
 
 ### Lớp học
-**Tạo lớp**
+*(Cần quyền `manage_classes`. Admin luôn có.)*
+
+**Tạo lớp** — chỉ **Admin**:
 1. Bấm **Thêm lớp**.
 2. Chọn **Chương trình** và **Khóa học** từ danh mục (cascade), lịch, giờ, phòng. **Mã lớp** được hệ thống tự tạo từ tên khóa học + số thứ tự (vd. `scratch_jr-01`).
 3. Chọn **ngày trong tuần** (CN–T7) — dùng để sinh buổi điểm danh.
-4. Lưu → lớp ở trạng thái **Đang hoạt động**.
+4. Chọn **ít nhất một giáo viên** phụ trách lớp.
+5. Lưu → lớp ở trạng thái **Đang hoạt động**.
 
 **Trạng thái lớp**
 | Status | Ý nghĩa | Giáo viên sửa nội dung? |
 |--------|---------|-------------------------|
-| `active` | Đang học | Có |
+| `active` | Đang học | Có (nếu có `manage_classes`) |
 | `inactive` | Ngừng (chỉ Admin đặt) | Không |
 | `ended` | Đã kết thúc | Không |
 
-**Kết thúc lớp:** nút **Kết thúc lớp** (`active` → `ended`). Giáo viên **không** đổi status qua dropdown (chỉ Admin).
+**Kết thúc lớp:** nút **Kết thúc lớp** (`active` → `ended`) khi có `manage_classes`. Giáo viên **không** đổi status qua dropdown (chỉ Admin).
 
-**Chỉnh sửa lớp:** lớp `active` có thể sửa chương trình, khóa học, lịch, phòng, ngày trong tuần (nút bút chì trên danh sách). **Mã lớp không đổi**. Lớp khóa (`inactive` / `ended`) không sửa được.
+**Chỉnh sửa lớp:** lớp `active` có thể sửa chương trình, khóa học, lịch, phòng, ngày trong tuần (nút bút chì). **Mã lớp không đổi**. Chỉ Admin đổi danh sách giáo viên phụ trách. Lớp khóa (`inactive` / `ended`) không sửa được.
 
 **Lớp khóa (`inactive` / `ended`):** không thêm/sửa học viên, điểm danh, tiến độ, đánh giá.
 
@@ -122,13 +129,14 @@ Admin có **toàn bộ quyền của giáo viên**, cộng thêm:
 
 ### Lớp học (quyền mở rộng)
 - Xem **mọi lớp** (không chỉ lớp được gán).
+- **Tạo lớp** và **gán giáo viên** phụ trách.
 - Đổi status: `active` / `inactive` / `ended` (kể cả mở lại lớp đã kết thúc).
-- Chỉ Admin đặt lớp sang **Ngừng hoạt động** (`inactive`).
+- Chỉ Admin đặt lớp sang **Ngừng hoạt động** (`inactive`) hoặc xóa lớp.
 
 ### Người dùng
 1. Duyệt tài khoản **pending** → chọn role `admin` hoặc `teacher`.
 2. Tạo user mới, khóa (`disabled`), reset mật khẩu.
-3. Click tên giáo viên → xem / mở hồ sơ; cấp **Quyền danh mục** (checkbox).
+3. Click tên giáo viên → xem / mở hồ sơ; cấp quyền (danh mục + **Chỉnh sửa lớp học**).
 4. Duyệt yêu cầu đổi hồ sơ GV (từ lần sửa thứ 2).
 
 > Không vô hiệu hóa / xóa **admin cuối cùng** trong hệ thống.
@@ -154,16 +162,17 @@ Dùng khi đưa dữ liệu cũ vào LMS (không migrate Firebase).
 | Chức năng | Teacher | Admin |
 |-----------|:-------:|:-----:|
 | Xem lớp được gán | ✅ | ✅ (mọi lớp) |
-| Tạo lớp | ✅ (tự gán mình) | ✅ |
-| Kết thúc lớp (`ended`) | ✅ | ✅ |
-| Đặt `inactive` / mở lại lớp | ❌ | ✅ |
+| Tab Lớp học / sửa metadata | Cần `manage_classes` | ✅ |
+| Tạo lớp + gán GV | ❌ | ✅ |
+| Kết thúc lớp (`ended`) | Cần `manage_classes` | ✅ |
+| Đặt `inactive` / mở lại / xóa lớp | ❌ | ✅ |
 | Quản lý HV / ĐD / Tiến độ / Đánh giá (lớp active) | ✅ | ✅ |
 | Danh mục (CRUD theo flag) | Theo quyền cấp | ✅ |
 | Tra cứu HV | ✅ | ✅ |
 | Thông báo + thu hồi 2h | ✅ | ✅ + thu hồi mọi lúc |
 | Hồ sơ: lần 1 tự sửa / lần sau duyệt | ✅ | Duyệt yêu cầu |
 | Thống kê / Import Excel | ❌ | ✅ |
-| Duyệt user, gán role | ❌ | ✅ |
+| Duyệt user, gán role / quyền | ❌ | ✅ |
 
 ---
 
@@ -179,8 +188,8 @@ Dùng khi đưa dữ liệu cũ vào LMS (không migrate Firebase).
 
 1. GV xin quyền → Admin vào **Người dùng** duyệt + gán `teacher`.
 2. GV đặt mật khẩu (nếu cần) → đăng nhập.
-3. GV tạo lớp hoặc Admin import Excel.
-4. Gán thêm TA/GV khác vào lớp nếu cần (qua form sửa lớp khi có field giáo viên).
+3. Admin **tạo lớp** và **gán giáo viên** (hoặc Import Excel).
+4. (Tuỳ chọn) Cấp `manage_classes` nếu GV cần sửa lịch/phòng trên tab Lớp học.
 5. Theo dõi **Thống kê** theo tháng.
 
 ---

@@ -12,16 +12,38 @@ import {
   PlayCircle,
   Plus,
   RefreshCw,
+  Trash2,
   TrendingUp,
   UserCheck,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useCatalog } from "@/hooks/useCatalog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SearchField } from "@/components/SearchField";
+import { SelectField } from "@/components/SelectField";
+import { TimeRangeField } from "@/components/TimeRangeField";
+import { useCatalog } from "@/hooks/useCatalog";
 import { lmsApi } from "@/lib/api";
 import { buildQuery, cn } from "@/lib/utils";
-import type { LmsClass } from "@/types/lms";
+import type { CatalogPermissions, LmsClass, LmsUser } from "@/types/lms";
+
+const STATUS_LABELS: Record<string, string> = {
+  active: "Đang hoạt động",
+  inactive: "Ngừng hoạt động",
+  ended: "Đã kết thúc",
+};
+
+const STATUS_OPTIONS = [
+  { value: "active", label: STATUS_LABELS.active },
+  { value: "inactive", label: STATUS_LABELS.inactive },
+  { value: "ended", label: STATUS_LABELS.ended },
+];
+
+type PendingAction =
+  | { type: "status"; id: number; code: string; status: string }
+  | { type: "end"; id: number; code: string }
+  | { type: "delete"; id: number; code: string }
+  | { type: "update" };
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
@@ -29,21 +51,23 @@ function StatusPill({ status }: { status: string }) {
     inactive: "pill-neutral",
     ended: "pill-warn",
   };
-  const label: Record<string, string> = {
-    active: "active",
-    inactive: "Ngừng hoạt động",
-    ended: "ended",
-  };
-  return <span className={`pill ${map[status] || "pill-neutral"}`}>{label[status] || status}</span>;
+  return (
+    <span className={`pill ${map[status] || "pill-neutral"}`}>
+      {STATUS_LABELS[status] || status}
+    </span>
+  );
 }
 
 function ClassesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
   const [, startTransition] = useTransition();
 
+  const [accessChecked, setAccessChecked] = useState(false);
+  const [canManageClasses, setCanManageClasses] = useState(false);
+  const [teacherOptions, setTeacherOptions] = useState<LmsUser[]>([]);
   const [items, setItems] = useState<LmsClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState(searchParams.get("q") || "");
@@ -56,6 +80,8 @@ function ClassesContent() {
   );
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<LmsClass | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [actionPending, setActionPending] = useState(false);
   const [form, setForm] = useState({
     program_id: "" as string,
     course_id: "" as string,
@@ -63,6 +89,7 @@ function ClassesContent() {
     time: "",
     room: "",
     days: [] as number[],
+    teacher_ids: [] as number[],
   });
 
   const modalOpen = showCreate || editing != null;
@@ -73,6 +100,7 @@ function ClassesContent() {
     time: "",
     room: "",
     days: [] as number[],
+    teacher_ids: [] as number[],
   };
 
   const { items: programs } = useCatalog("programs");
@@ -102,6 +130,38 @@ function ClassesContent() {
     return { all, active, inactive, ended, studentSum, avgFill };
   }, [items]);
 
+  useEffect(() => {
+    if (sessionStatus === "loading") return;
+    lmsApi
+      .me()
+      .then(async (res) => {
+        const role = res.data?.user?.role || (session?.user as { role?: string } | undefined)?.role;
+        const flags = (res.data?.user?.catalog_permissions ||
+          null) as CatalogPermissions | null;
+        const admin = role === "admin";
+        const allowed = admin || !!flags?.manage_classes;
+        if (!allowed) {
+          toast.error("Bạn không có quyền quản lý lớp học");
+          router.replace("/");
+          return;
+        }
+        setCanManageClasses(true);
+        setAccessChecked(true);
+        if (admin) {
+          try {
+            const usersRes = await lmsApi.users("?role=teacher&status=approved&limit=100");
+            setTeacherOptions(Array.isArray(usersRes.data) ? usersRes.data : []);
+          } catch {
+            setTeacherOptions([]);
+          }
+        }
+      })
+      .catch((e) => {
+        toast.error(e.message || "Không kiểm tra được quyền");
+        router.replace("/");
+      });
+  }, [sessionStatus, router, session?.user]);
+
   function load() {
     const query = buildQuery({
       q,
@@ -124,9 +184,10 @@ function ClassesContent() {
   }
 
   useEffect(() => {
+    if (!accessChecked) return;
     load();
      
-  }, []);
+  }, [accessChecked]);
 
   function setStatusFilter(next: string[], qOverride?: string) {
     const search = qOverride !== undefined ? qOverride : q;
@@ -163,13 +224,14 @@ function ClassesContent() {
   }
 
   function openCreate() {
+    if (!isAdmin) return;
     setEditing(null);
     setForm(emptyForm);
     setShowCreate(true);
   }
 
   function openEdit(c: LmsClass) {
-    if (c.is_locked) return;
+    if (c.is_locked || !canManageClasses) return;
     setShowCreate(false);
     setEditing(c);
     setForm({
@@ -179,12 +241,21 @@ function ClassesContent() {
       time: c.time || "",
       room: c.room || "",
       days: Array.isArray(c.days) ? [...c.days] : [],
+      teacher_ids: (c.teachers || []).map((t) => t.lms_user_id),
     });
   }
 
-  async function saveClass(e: FormEvent) {
-    e.preventDefault();
-    const body = {
+  function toggleTeacher(id: number) {
+    setForm((prev) => ({
+      ...prev,
+      teacher_ids: prev.teacher_ids.includes(id)
+        ? prev.teacher_ids.filter((x) => x !== id)
+        : [...prev.teacher_ids, id],
+    }));
+  }
+
+  function buildClassBody() {
+    const body: Record<string, unknown> = {
       program_id: form.program_id ? Number(form.program_id) : null,
       course_id: form.course_id ? Number(form.course_id) : null,
       schedule: form.schedule || null,
@@ -192,46 +263,118 @@ function ClassesContent() {
       room: form.room || null,
       days: form.days,
     };
+    if (isAdmin) {
+      body.teachers = form.teacher_ids.map((lms_user_id) => ({
+        lms_user_id,
+        role: "teacher",
+      }));
+    }
+    return body;
+  }
+
+  async function createClassNow() {
+    if (!isAdmin) return;
+    if (!form.teacher_ids.length) {
+      toast.error("Chọn ít nhất một giáo viên phụ trách lớp");
+      return;
+    }
     try {
-      if (editing) {
-        await lmsApi.updateClass(editing.id, body);
-        toast.success("Đã cập nhật lớp");
-      } else {
-        await lmsApi.createClass(body);
-        toast.success("Đã tạo lớp");
-      }
+      await lmsApi.createClass(buildClassBody());
+      toast.success("Đã tạo lớp");
       closeModal();
       load();
     } catch (err: unknown) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : editing
-            ? "Lỗi cập nhật lớp"
-            : "Lỗi tạo lớp",
-      );
+      toast.error(err instanceof Error ? err.message : "Lỗi tạo lớp");
     }
   }
 
-  async function endClass(id: number, code: string) {
-    if (!confirm(`Xác nhận kết thúc lớp học ${code}?`)) return;
-    try {
-      await lmsApi.endClass(id);
-      toast.success("Đã kết thúc lớp");
-      load();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Lỗi kết thúc lớp");
+  function saveClass(e: FormEvent) {
+    e.preventDefault();
+    if (editing) {
+      if (isAdmin && !form.teacher_ids.length) {
+        toast.error("Chọn ít nhất một giáo viên phụ trách lớp");
+        return;
+      }
+      setPendingAction({ type: "update" });
+      return;
+    }
+    void createClassNow();
+  }
+
+  function confirmDialogCopy(action: PendingAction) {
+    switch (action.type) {
+      case "status":
+        return {
+          title: "Đổi trạng thái lớp",
+          description: `Đổi trạng thái lớp ${action.code} thành «${STATUS_LABELS[action.status] || action.status}»?`,
+          confirmLabel: "Đổi trạng thái",
+          variant: "primary" as const,
+        };
+      case "end":
+        return {
+          title: "Kết thúc lớp",
+          description: `Xác nhận kết thúc lớp ${action.code}? Lớp sẽ bị khóa chỉnh sửa.`,
+          confirmLabel: "Kết thúc lớp",
+          variant: "danger" as const,
+        };
+      case "delete":
+        return {
+          title: "Xóa lớp",
+          description: `Xóa lớp ${action.code}? Hành động này không thể hoàn tác dễ dàng.`,
+          confirmLabel: "Xóa lớp",
+          variant: "danger" as const,
+        };
+      case "update":
+        return {
+          title: "Lưu thay đổi",
+          description: `Lưu thay đổi lớp ${editing?.code ?? ""}?`,
+          confirmLabel: "Lưu thay đổi",
+          variant: "primary" as const,
+        };
     }
   }
 
-  async function setStatus(id: number, status: string) {
+  async function runPendingAction() {
+    if (!pendingAction) return;
+    setActionPending(true);
     try {
-      await lmsApi.updateClassStatus(id, status);
-      toast.success("Đã cập nhật trạng thái");
+      switch (pendingAction.type) {
+        case "status":
+          await lmsApi.updateClassStatus(pendingAction.id, pendingAction.status);
+          toast.success("Đã cập nhật trạng thái");
+          break;
+        case "end":
+          await lmsApi.endClass(pendingAction.id);
+          toast.success("Đã kết thúc lớp");
+          break;
+        case "delete":
+          await lmsApi.deleteClass(pendingAction.id);
+          toast.success("Đã xóa lớp");
+          break;
+        case "update":
+          if (!editing) break;
+          await lmsApi.updateClass(editing.id, buildClassBody());
+          toast.success("Đã cập nhật lớp");
+          closeModal();
+          break;
+      }
+      setPendingAction(null);
       load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Lỗi cập nhật");
+      toast.error(err instanceof Error ? err.message : "Thao tác thất bại");
+    } finally {
+      setActionPending(false);
     }
+  }
+
+  if (!accessChecked || !canManageClasses) {
+    return (
+      <div className="flex w-full flex-col gap-6">
+        <div className="h-10 w-72 animate-pulse rounded-lg bg-surface-low" />
+        <div className="h-40 animate-pulse rounded-xl bg-surface-low" />
+        <div className="h-64 animate-pulse rounded-xl bg-surface-low" />
+      </div>
+    );
   }
 
   return (
@@ -252,14 +395,16 @@ function ClassesContent() {
             <Download className="h-4 w-4" />
             Xuất Excel
           </button>
-          <button
-            type="button"
-            className="btn btn-primary w-full sm:w-auto"
-            onClick={openCreate}
-          >
-            <Plus className="h-4 w-4" />
-            Thêm lớp học mới
-          </button>
+          {isAdmin ? (
+            <button
+              type="button"
+              className="btn btn-primary w-full sm:w-auto"
+              onClick={openCreate}
+            >
+              <Plus className="h-4 w-4" />
+              Thêm lớp học mới
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -459,7 +604,7 @@ function ClassesContent() {
                         >
                           <Eye className="h-4 w-4" />
                         </Link>
-                        {!c.is_locked ? (
+                        {!c.is_locked && canManageClasses ? (
                           <button
                             type="button"
                             className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
@@ -469,26 +614,45 @@ function ClassesContent() {
                             <Pencil className="h-4 w-4" />
                           </button>
                         ) : null}
-                        {!c.is_locked ? (
+                        {!c.is_locked && canManageClasses ? (
                           <button
                             type="button"
                             className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
                             title="Kết thúc lớp"
-                            onClick={() => endClass(c.id, c.code)}
+                            onClick={() => setPendingAction({ type: "end", id: c.id, code: c.code })}
                           >
                             <XCircle className="h-4 w-4" />
                           </button>
                         ) : null}
-                        {isAdmin ? (
-                          <select
-                            className="input !h-8 !w-auto !py-0 text-[11px]"
-                            value={c.status}
-                            onChange={(e) => setStatus(c.id, e.target.value)}
+                        {isAdmin && !c.is_locked ? (
+                          <button
+                            type="button"
+                            className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
+                            title="Xóa lớp"
+                            onClick={() =>
+                              setPendingAction({ type: "delete", id: c.id, code: c.code })
+                            }
                           >
-                            <option value="active">active</option>
-                            <option value="inactive">inactive</option>
-                            <option value="ended">ended</option>
-                          </select>
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                        {isAdmin ? (
+                          <SelectField
+                            size="sm"
+                            className="w-[9.5rem]"
+                            aria-label={`Trạng thái lớp ${c.code}`}
+                            value={c.status}
+                            options={STATUS_OPTIONS}
+                            onChange={(status) => {
+                              if (status === c.status) return;
+                              setPendingAction({
+                                type: "status",
+                                id: c.id,
+                                code: c.code,
+                                status,
+                              });
+                            }}
+                          />
                         ) : null}
                       </div>
                     </td>
@@ -524,8 +688,10 @@ function ClassesContent() {
                   </h3>
                   <span className="text-xs text-on-surface-variant">
                     {editing
-                      ? "Cập nhật chương trình, lịch và phòng học"
-                      : "Khởi tạo kế hoạch giảng dạy và xếp lịch"}
+                      ? isAdmin
+                        ? "Cập nhật lịch, phòng học và giáo viên phụ trách"
+                        : "Cập nhật chương trình, lịch và phòng học"
+                      : "Khởi tạo lớp và gán giáo viên phụ trách"}
                   </span>
                 </div>
               </div>
@@ -556,42 +722,39 @@ function ClassesContent() {
                   <label className="text-xs font-semibold text-foreground">
                     Chương trình đào tạo
                   </label>
-                  <select
-                    className="input"
+                  <SelectField
                     value={form.program_id}
-                    onChange={(e) =>
+                    placeholder="- Chương trình -"
+                    options={[
+                      { value: "", label: "- Chương trình -" },
+                      ...programs.map((p) => ({ value: String(p.id), label: p.name })),
+                    ]}
+                    onChange={(program_id) =>
                       setForm((prev) => ({
                         ...prev,
-                        program_id: e.target.value,
+                        program_id,
                         course_id: "",
                       }))
                     }
-                  >
-                    <option value="">- Chương trình -</option>
-                    {programs.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-foreground">
                     Khóa học <span className="text-danger">*</span>
                   </label>
-                  <select
-                    className="input"
+                  <SelectField
                     required
                     value={form.course_id}
-                    onChange={(e) => setForm({ ...form, course_id: e.target.value })}
-                  >
-                    <option value="">- Khóa học -</option>
-                    {filteredCourses.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="- Khóa học -"
+                    options={[
+                      { value: "", label: "- Khóa học -" },
+                      ...filteredCourses.map((c) => ({
+                        value: String(c.id),
+                        label: c.name,
+                      })),
+                    ]}
+                    onChange={(course_id) => setForm({ ...form, course_id })}
+                  />
                   {!editing ? (
                     <p className="text-[11px] text-on-surface-variant">
                       Mã lớp sẽ được tạo tự động từ tên khóa học.
@@ -639,11 +802,9 @@ function ClassesContent() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-foreground">Khung giờ học</label>
-                  <input
-                    className="input"
-                    placeholder="18:00 - 19:30"
+                  <TimeRangeField
                     value={form.time}
-                    onChange={(e) => setForm({ ...form, time: e.target.value })}
+                    onChange={(time) => setForm({ ...form, time })}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -656,6 +817,40 @@ function ClassesContent() {
                   />
                 </div>
               </div>
+              {isAdmin ? (
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold text-foreground">
+                    Giáo viên phụ trách <span className="text-danger">*</span>
+                  </label>
+                  {teacherOptions.length === 0 ? (
+                    <p className="text-xs text-on-surface-variant">
+                      Chưa có giáo viên đã duyệt để gán.
+                    </p>
+                  ) : (
+                    <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-lg border border-border bg-surface-low/40 p-2">
+                      {teacherOptions.map((t) => {
+                        const checked = form.teacher_ids.includes(t.id);
+                        return (
+                          <label
+                            key={t.id}
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleTeacher(t.id)}
+                            />
+                            <span className="font-medium">{t.name || t.email}</span>
+                            {t.name && t.email ? (
+                              <span className="text-xs text-on-surface-variant">{t.email}</span>
+                            ) : null}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-surface-low px-6 py-4">
               <button type="button" className="btn btn-ghost" onClick={closeModal}>
@@ -667,6 +862,18 @@ function ClassesContent() {
             </div>
           </form>
         </div>
+      ) : null}
+
+      {pendingAction ? (
+        <ConfirmDialog
+          open
+          {...confirmDialogCopy(pendingAction)}
+          pending={actionPending}
+          onCancel={() => {
+            if (!actionPending) setPendingAction(null);
+          }}
+          onConfirm={() => void runPendingAction()}
+        />
       ) : null}
     </div>
   );

@@ -103,9 +103,12 @@ export default function LoginPage() {
         <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
         <div className="relative space-y-4">
         <div>
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-bold text-on-primary">
-            ST
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/logo.jpg"
+            alt="Sáng Tạo Xanh"
+            className="mb-3 h-12 w-12 rounded-xl object-contain"
+          />
           <h1 className="text-xl font-bold text-foreground">Đăng nhập LMS</h1>
           <p className="text-sm text-on-surface-variant">Sáng Tạo Xanh · Enterprise LMS</p>
         </div>

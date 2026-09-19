@@ -14,6 +14,11 @@ export const metadata: Metadata = {
   title: "LMS Sáng Tạo Xanh",
   description: "Hệ thống quản lý lớp học nội bộ",
   robots: { index: false, follow: false },
+  icons: {
+    icon: [{ url: "/images/logo.jpg", type: "image/jpeg" }],
+    apple: [{ url: "/images/logo.jpg", type: "image/jpeg" }],
+    shortcut: "/images/logo.jpg",
+  },
 };
 
 export default function RootLayout({

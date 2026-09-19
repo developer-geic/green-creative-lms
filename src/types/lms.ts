@@ -4,6 +4,7 @@ export type CatalogPermissions = {
   manage_students: boolean;
   manage_student_statuses: boolean;
   manage_absorption_levels: boolean;
+  manage_classes: boolean;
 };
 
 export type LmsUser = {
@@ -68,6 +69,7 @@ export type LmsStudent = {
   english_name?: string | null;
   parent_phone?: string | null;
   notes?: string | null;
+  avatar?: string | null;
   status?: string | null;
   status_id?: number | null;
   status_name?: string | null;

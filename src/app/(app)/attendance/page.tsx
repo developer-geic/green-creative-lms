@@ -2,22 +2,71 @@
 
 import { Suspense, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { SelectField } from "@/components/SelectField";
 import { lmsApi } from "@/lib/api";
-import { buildQuery, cn } from "@/lib/utils";
+import { buildQuery, cn, toLocalDateKey } from "@/lib/utils";
 
 const ATT_OPTIONS = [
-  { value: "", label: "- Trống -", className: "bg-surface-low text-on-surface-variant" },
-  { value: "present", label: "Có mặt", className: "bg-[#ecfdf5] text-[#065f46]" },
-  { value: "excused", label: "Có phép", className: "bg-[#fffbeb] text-[#92400e]" },
-  { value: "unexcused", label: "Không phép", className: "bg-[#fef2f2] text-[#991b1b]" },
+  {
+    value: "",
+    label: "- Trống -",
+    className: "bg-surface-low text-on-surface-variant",
+  },
+  {
+    value: "present",
+    label: "Có mặt",
+    className: "bg-[#ecfdf5] text-[#065f46]",
+  },
+  {
+    value: "excused",
+    label: "Có phép",
+    className: "bg-[#fffbeb] text-[#92400e]",
+  },
+  {
+    value: "unexcused",
+    label: "Không phép",
+    className: "bg-[#fef2f2] text-[#991b1b]",
+  },
 ];
+
+const ATT_SELECT_OPTIONS = ATT_OPTIONS.map((o) => ({
+  value: o.value,
+  label: o.label,
+  optionClassName: o.className,
+}));
 
 const WEEKDAY_VI = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"] as const;
 
+const STATUS_LABEL: Record<string, string> = {
+  "": "Trống",
+  present: "Có mặt",
+  excused: "Có phép",
+  unexcused: "Không phép",
+};
+
+type PendingCell = {
+  studentId: number;
+  studentName: string;
+  date: string;
+  sessionId: number;
+  from: string;
+  to: string;
+};
+
+type DiscardIntent =
+  | { kind: "class"; classId: string }
+  | { kind: "month"; year: number; month: number }
+  | { kind: "reload" };
+
 function optionClass(status: string) {
   return ATT_OPTIONS.find((o) => o.value === status)?.className || ATT_OPTIONS[0].className;
+}
+
+function pendingKey(studentId: number, date: string) {
+  return `${studentId}:${date}`;
 }
 
 /** Parse YYYY-MM-DD as local calendar day (avoid UTC shift). */
@@ -32,11 +81,18 @@ function formatSessionHeader(iso: string) {
   };
 }
 
+function shortDate(iso: string) {
+  const h = formatSessionHeader(iso);
+  return `${h.day}/${h.month}`;
+}
+
 function AttendanceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const now = new Date();
-  const [classes, setClasses] = useState<Array<{ id: number; code: string; schedule?: string; time?: string; room?: string }>>([]);
+  const [classes, setClasses] = useState<
+    Array<{ id: number; code: string; schedule?: string; time?: string; room?: string }>
+  >([]);
   const [classId, setClassId] = useState(searchParams.get("class_id") || "");
   const [year, setYear] = useState(Number(searchParams.get("year") || now.getFullYear()));
   const [month, setMonth] = useState(Number(searchParams.get("month") || now.getMonth() + 1));
@@ -50,7 +106,13 @@ function AttendanceContent() {
       stats?: { rate?: number | null; present?: number; absent?: number };
     }>;
   } | null>(null);
+  const [pending, setPending] = useState<Record<string, PendingCell>>({});
+  const [saving, setSaving] = useState(false);
+  const [discardIntent, setDiscardIntent] = useState<DiscardIntent | null>(null);
   const [, startTransition] = useTransition();
+
+  const pendingList = useMemo(() => Object.values(pending), [pending]);
+  const dirty = pendingList.length > 0;
 
   useEffect(() => {
     lmsApi.classes("?limit=100").then((res) => {
@@ -58,7 +120,6 @@ function AttendanceContent() {
       setClasses(list);
       if (!classId && list[0]) setClassId(String(list[0].id));
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function load(cid = classId, y = year, m = month) {
@@ -73,13 +134,13 @@ function AttendanceContent() {
 
   useEffect(() => {
     if (classId) load(classId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classId]);
 
   const sessionByDate = useMemo(() => {
     const map: Record<string, number> = {};
     (data?.sessions || []).forEach((s) => {
-      map[s.session_date?.slice?.(0, 10) || s.session_date] = s.id;
+      const key = toLocalDateKey(s.session_date);
+      if (key) map[key] = s.id;
     });
     return map;
   }, [data]);
@@ -90,22 +151,72 @@ function AttendanceContent() {
     const dates = data?.dates || [];
     if (!dates.length || !data?.grid?.length) return 0;
     return dates.filter((d) =>
-      data.grid!.some((row) => row.cells?.[d]?.status),
+      data.grid!.some((row) => {
+        const key = pendingKey(row.student.id, d);
+        const status = pending[key]?.to ?? row.cells?.[d]?.status;
+        return !!status;
+      }),
     ).length;
-  }, [data]);
+  }, [data, pending]);
 
-  async function onChange(studentId: number, date: string, status: string) {
+  function cellValue(
+    studentId: number,
+    date: string,
+    serverStatus?: string,
+  ) {
+    const key = pendingKey(studentId, date);
+    if (pending[key]) return pending[key].to;
+    return serverStatus || "";
+  }
+
+  function queueChange(
+    studentId: number,
+    studentName: string,
+    date: string,
+    to: string,
+    fromServer: string,
+  ) {
     const sessionId = sessionByDate[date];
     if (!sessionId) return;
-    try {
-      await lmsApi.upsertAttendance(sessionId, [
-        { student_id: studentId, status: status || null },
-      ]);
-      toast.success("Đã lưu");
-      load();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Lỗi lưu điểm danh");
+    const key = pendingKey(studentId, date);
+    const from = pending[key]?.from ?? fromServer;
+    setPending((prev) => {
+      const next = { ...prev };
+      if (to === from) {
+        delete next[key];
+      } else {
+        next[key] = { studentId, studentName, date, sessionId, from, to };
+      }
+      return next;
+    });
+  }
+
+  function clearPending() {
+    setPending({});
+  }
+
+  function requestDiscard(intent: DiscardIntent) {
+    if (!dirty) {
+      applyDiscard(intent);
+      return;
     }
+    setDiscardIntent(intent);
+  }
+
+  function applyDiscard(intent: DiscardIntent) {
+    clearPending();
+    setDiscardIntent(null);
+    if (intent.kind === "class") {
+      setClassId(intent.classId);
+      return;
+    }
+    if (intent.kind === "month") {
+      setMonth(intent.month);
+      setYear(intent.year);
+      load(classId, intent.year, intent.month);
+      return;
+    }
+    load();
   }
 
   function shiftMonth(delta: number) {
@@ -118,30 +229,54 @@ function AttendanceContent() {
       m = 1;
       y += 1;
     }
-    setMonth(m);
-    setYear(y);
-    load(classId, y, m);
+    requestDiscard({ kind: "month", year: y, month: m });
+  }
+
+  async function saveAll() {
+    if (!pendingList.length) return;
+    setSaving(true);
+    try {
+      const bySession = new Map<number, Array<{ student_id: number; status: string | null }>>();
+      for (const cell of pendingList) {
+        const list = bySession.get(cell.sessionId) || [];
+        list.push({ student_id: cell.studentId, status: cell.to || null });
+        bySession.set(cell.sessionId, list);
+      }
+      await Promise.all(
+        [...bySession.entries()].map(([sessionId, records]) =>
+          lmsApi.upsertAttendance(sessionId, records),
+        ),
+      );
+      toast.success(`Đã lưu ${pendingList.length} thay đổi điểm danh`);
+      clearPending();
+      load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Lỗi lưu điểm danh");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <div className="flex w-full flex-col gap-6">
+    <div className={cn("flex w-full flex-col gap-6", dirty && "pb-28")}>
       <div className="relative overflow-hidden rounded-xl bg-surface p-6 shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
         <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
         <div className="relative flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
           <div className="flex flex-col gap-1.5">
             <div className="relative inline-flex max-w-xl items-center">
-              <select
+              <SelectField
                 aria-label="Chọn lớp học"
-                className="input h-10 appearance-none pr-8 font-semibold"
+                className="min-w-[14rem]"
                 value={classId}
-                onChange={(e) => setClassId(e.target.value)}
-              >
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    Lớp: {c.code}
-                  </option>
-                ))}
-              </select>
+                options={classes.map((c) => ({
+                  value: String(c.id),
+                  label: `Lớp: ${c.code}`,
+                }))}
+                onChange={(next) => {
+                  if (next === classId) return;
+                  requestDiscard({ kind: "class", classId: next });
+                }}
+              />
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-on-surface-variant">
               <span>{selectedClass?.schedule || "—"}</span>
@@ -173,9 +308,13 @@ function AttendanceContent() {
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            <button type="button" className="btn btn-primary" onClick={() => load()}>
-              <Save className="h-4 w-4" />
-              Làm mới / Lưu
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => requestDiscard({ kind: "reload" })}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Làm mới
             </button>
           </div>
         </div>
@@ -289,25 +428,33 @@ function AttendanceContent() {
                       </div>
                     </td>
                     {(data.dates || []).map((d) => {
-                      const status = row.cells?.[d]?.status || "";
+                      const serverStatus = row.cells?.[d]?.status || "";
+                      const status = cellValue(row.student.id, d, serverStatus);
+                      const isDirty = !!pending[pendingKey(row.student.id, d)];
                       return (
                         <td key={d} className="px-1.5 py-2.5 text-center">
-                          <select
+                          <SelectField
+                            size="sm"
                             aria-label={`Điểm danh ${row.student.full_name} ngày ${d}`}
-                            className={cn(
-                              "h-9 w-full cursor-pointer rounded-lg border border-transparent text-center text-[11px] font-semibold outline-none transition-shadow focus:border-primary/30 focus:ring-2 focus:ring-primary/20",
+                            className="w-full"
+                            triggerClassName={cn(
                               optionClass(status),
+                              "justify-center border border-transparent focus-visible:border-primary/30",
+                              isDirty && "ring-2 ring-primary/35",
                             )}
                             disabled={data.class?.is_locked}
                             value={status}
-                            onChange={(e) => onChange(row.student.id, d, e.target.value)}
-                          >
-                            {ATT_OPTIONS.map((o) => (
-                              <option key={o.value} value={o.value}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </select>
+                            options={ATT_SELECT_OPTIONS}
+                            onChange={(to) =>
+                              queueChange(
+                                row.student.id,
+                                row.student.full_name,
+                                d,
+                                to,
+                                serverStatus,
+                              )
+                            }
+                          />
                         </td>
                       );
                     })}
@@ -336,6 +483,66 @@ function AttendanceContent() {
       ) : (
         <div className="text-sm text-on-surface-variant">Chọn lớp để xem điểm danh...</div>
       )}
+
+      {dirty ? (
+        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-surface-high bg-surface/95 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] backdrop-blur-sm md:left-64">
+          <div className="mx-auto flex max-w-[1600px] flex-col gap-3 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-end sm:justify-between sm:px-6">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-foreground">
+                {pendingList.length} thay đổi chưa lưu
+              </div>
+              <ul className="mt-1.5 max-h-[7.5rem] space-y-1 overflow-y-auto text-xs text-on-surface-variant">
+                {pendingList.map((cell) => (
+                  <li key={`${cell.studentId}:${cell.date}`}>
+                    <span className="font-medium text-foreground">{cell.studentName}</span>
+                    {" · "}
+                    {shortDate(cell.date)}
+                    {" · "}
+                    <span className={cn("rounded px-1 py-0.5", optionClass(cell.from))}>
+                      {STATUS_LABEL[cell.from] ?? "Trống"}
+                    </span>
+                    {" → "}
+                    <span className={cn("rounded px-1 py-0.5", optionClass(cell.to))}>
+                      {STATUS_LABEL[cell.to] ?? "Trống"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={saving}
+                onClick={clearPending}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={saving}
+                onClick={() => void saveAll()}
+              >
+                <Save className="h-4 w-4" />
+                {saving ? "Đang lưu..." : "Lưu tất cả"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {discardIntent ? (
+        <ConfirmDialog
+          open
+          title="Bỏ thay đổi chưa lưu?"
+          description="Bạn có thay đổi điểm danh chưa lưu. Tiếp tục sẽ hủy các thay đổi đó."
+          confirmLabel="Bỏ thay đổi"
+          variant="danger"
+          onCancel={() => setDiscardIntent(null)}
+          onConfirm={() => applyDiscard(discardIntent)}
+        />
+      ) : null}
     </div>
   );
 }
