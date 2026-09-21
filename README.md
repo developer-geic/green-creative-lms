@@ -30,5 +30,6 @@ Tài khoản mẫu: `admin@lms.local` / `admin123`, `teacher@lms.local` / `teach
 
 - Subdomain FE: `lms.sangtaoxanh.edu.vn`
 - API: `https://api.sangtaoxanh.edu.vn/api/v1/lms`
+- `NEXT_PUBLIC_API_URL` is baked at Docker build (`Dockerfile` ARG + CD `build-args`). Runtime `fe-lms/.env` is not enough for browser calls.
 - Thêm origin LMS vào `CORS_ALLOWED_ORIGINS`
 - Nginx proxy FE container `fe-lms-sangtaoxanh:3000`
