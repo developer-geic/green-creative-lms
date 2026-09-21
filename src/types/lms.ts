@@ -70,6 +70,32 @@ export type LmsStudent = {
   parent_phone?: string | null;
   notes?: string | null;
   avatar?: string | null;
+  date_of_birth?: string | null;
+  school?: string | null;
+  gender?: "male" | "female" | "other" | string | null;
+  ethnicity?: string | null;
+  religion?: string | null;
+  place_of_birth?: string | null;
+  hometown?: string | null;
+  permanent_address?: string | null;
+  current_address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  father_name?: string | null;
+  father_birth_year?: number | null;
+  father_occupation?: string | null;
+  father_phone?: string | null;
+  father_residence?: string | null;
+  mother_name?: string | null;
+  mother_birth_year?: number | null;
+  mother_occupation?: string | null;
+  mother_phone?: string | null;
+  mother_residence?: string | null;
+  guardian_name?: string | null;
+  guardian_birth_year?: number | null;
+  guardian_occupation?: string | null;
+  guardian_phone?: string | null;
+  guardian_residence?: string | null;
   status?: string | null;
   status_id?: number | null;
   status_name?: string | null;
@@ -107,4 +133,49 @@ export type StatsByTeacher = {
 export type StatsPayload = {
   summary: StatsSummary;
   by_teacher: StatsByTeacher[];
+};
+
+export type TeacherProfile = {
+  id?: number;
+  lms_user_id?: number;
+  full_name?: string | null;
+  phone?: string | null;
+  dob?: string | null;
+  address?: string | null;
+  bio?: string | null;
+  avatar?: string | null;
+  certificate?: string | null;
+  experience?: string | null;
+  direct_edit_used?: boolean;
+};
+
+export type ProfileFieldDiff = {
+  old?: string | null;
+  new?: string | null;
+};
+
+export type TeacherProfileChangeRequest = {
+  id: number;
+  status: "pending" | "approved" | "rejected" | string;
+  payload?: Record<string, ProfileFieldDiff | string | null> | null;
+  created_at?: string | null;
+  reviewed_at?: string | null;
+  review_note?: string | null;
+};
+
+export type UserDetailClassAssignment = {
+  id?: number | null;
+  code?: string | null;
+  status?: string | null;
+  role?: string | null;
+  course?: string | null;
+  program?: string | null;
+};
+
+export type UserDetailPayload = {
+  user: LmsUser;
+  catalog_permissions?: CatalogPermissions;
+  teacher_profile?: TeacherProfile | null;
+  classes?: UserDetailClassAssignment[];
+  change_requests?: TeacherProfileChangeRequest[];
 };

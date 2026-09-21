@@ -1,7 +1,9 @@
 import { withAuth } from "next-auth/middleware";
+import { lmsAuthCookies } from "@/lib/auth-cookies";
 
 export default withAuth({
   pages: { signIn: "/login" },
+  cookies: { sessionToken: lmsAuthCookies.sessionToken },
 });
 
 export const config = {

@@ -1,6 +1,7 @@
 import CredentialsProvider from "next-auth/providers/credentials";
 import type { AuthOptions } from "next-auth";
 import type { JWT } from "next-auth/jwt";
+import { lmsAuthCookies } from "@/lib/auth-cookies";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8880/api/v1";
 
@@ -29,6 +30,7 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
 export const authOptions: AuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   session: { strategy: "jwt" },
+  cookies: lmsAuthCookies,
   pages: { signIn: "/login" },
   providers: [
     CredentialsProvider({

@@ -82,7 +82,8 @@ Trên màn hình nhỏ (dưới 768px), menu nằm trong **ngăn kéo (drawer)**
 
 ### Học viên
 - Học viên là **master** (dùng chung nhiều lớp). Trang **Học viên**: tìm, lọc theo lớp; **Thêm / Sửa / Xóa** hồ sơ (cần quyền `manage_students`, Admin luôn được).
-- Trong lớp: **enroll** HV có sẵn hoặc **Thêm HV mới** (cần quyền `manage_students`).
+- Hồ sơ master gồm: họ tên, tên EN, **ngày sinh** (hiển thị tuổi), giới tính, trường, dân tộc, tôn giáo, nơi sinh; quê quán / hộ khẩu / địa chỉ hiện tại (text tự do); SĐT học sinh, SĐT phụ huynh, email; thông tin cha / mẹ / người giám hộ (họ tên, năm sinh, nghề nghiệp, SĐT, nơi cư trú); ghi chú và ảnh đại diện.
+- Trong lớp: **enroll** HV có sẵn hoặc **Thêm HV mới** (cần quyền `manage_students`) — form nhanh trong lớp chỉ cần tên (và tùy chọn SĐT/ghi chú).
 - Trạng thái theo enrollment (danh mục): `active` / `reserved` / `dropped` (và các mục Admin/GV được cấp quyền thêm).
 - Không enroll trùng cùng HV trong một lớp.
 

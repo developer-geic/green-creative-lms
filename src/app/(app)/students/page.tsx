@@ -17,15 +17,114 @@ import { lmsApi } from "@/lib/api";
 import { avatarSrc } from "@/lib/avatar";
 import { buildQuery } from "@/lib/utils";
 import type { LmsClass, LmsStudent } from "@/types/lms";
+import {
+  EMPTY_STUDENT_FORM,
+  ageFromDob,
+  studentFormToBody,
+  studentToForm,
+  type StudentForm,
+} from "./student-form";
 
-const EMPTY_FORM = {
-  full_name: "",
-  english_name: "",
-  parent_phone: "",
-  notes: "",
-};
+function Field({
+  label,
+  required,
+  children,
+  hint,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+  hint?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs font-semibold text-foreground">
+        {label}
+        {required ? <span className="text-danger"> *</span> : null}
+      </label>
+      {children}
+      {hint ? <p className="text-[11px] text-on-surface-variant">{hint}</p> : null}
+    </div>
+  );
+}
 
-type StudentForm = typeof EMPTY_FORM;
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 border-t border-surface-low pt-4 first:border-t-0 first:pt-0">
+      <span className="h-2 w-2 rounded-full bg-primary" />
+      <h4 className="text-sm font-semibold text-foreground">{children}</h4>
+    </div>
+  );
+}
+
+function FamilyBlock({
+  title,
+  prefix,
+  form,
+  onChange,
+}: {
+  title: string;
+  prefix: "father" | "mother" | "guardian";
+  form: StudentForm;
+  onChange: (patch: Partial<StudentForm>) => void;
+}) {
+  const nameKey = `${prefix}_name` as keyof StudentForm;
+  const yearKey = `${prefix}_birth_year` as keyof StudentForm;
+  const occKey = `${prefix}_occupation` as keyof StudentForm;
+  const phoneKey = `${prefix}_phone` as keyof StudentForm;
+  const resKey = `${prefix}_residence` as keyof StudentForm;
+
+  return (
+    <div className="space-y-3 rounded-xl bg-surface-low/50 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+        {title}
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Họ và tên">
+          <input
+            className="input"
+            value={form[nameKey]}
+            onChange={(e) => onChange({ [nameKey]: e.target.value } as Partial<StudentForm>)}
+          />
+        </Field>
+        <Field label="Năm sinh">
+          <input
+            className="input"
+            type="number"
+            min={1900}
+            max={new Date().getFullYear()}
+            placeholder="VD: 1985"
+            value={form[yearKey]}
+            onChange={(e) => onChange({ [yearKey]: e.target.value } as Partial<StudentForm>)}
+          />
+        </Field>
+        <Field label="Nghề nghiệp">
+          <input
+            className="input"
+            value={form[occKey]}
+            onChange={(e) => onChange({ [occKey]: e.target.value } as Partial<StudentForm>)}
+          />
+        </Field>
+        <Field label="Số điện thoại">
+          <input
+            className="input"
+            value={form[phoneKey]}
+            onChange={(e) => onChange({ [phoneKey]: e.target.value } as Partial<StudentForm>)}
+          />
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="Nơi cư trú">
+            <input
+              className="input"
+              value={form[resKey]}
+              onChange={(e) => onChange({ [resKey]: e.target.value } as Partial<StudentForm>)}
+            />
+          </Field>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function StudentFormModal({
   editing,
@@ -47,12 +146,13 @@ function StudentFormModal({
   onSubmit: (e: FormEvent) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const age = ageFromDob(form.date_of_birth);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#213145]/40 p-4 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
-        className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
+        className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
       >
         <div className="flex items-center justify-between bg-surface-low px-6 py-4">
           <div className="flex items-center gap-2">
@@ -65,7 +165,7 @@ function StudentFormModal({
               </h3>
               <span className="text-xs text-on-surface-variant">
                 {editing
-                  ? "Cập nhật thông tin master, áp dụng cho mọi lớp đã enroll"
+                  ? "Cập nhật hồ sơ master, áp dụng cho mọi lớp đã enroll"
                   : "Tạo hồ sơ master để enroll vào lớp sau"}
               </span>
             </div>
@@ -78,16 +178,13 @@ function StudentFormModal({
             <XCircle className="h-5 w-5" />
           </button>
         </div>
+
         <div className="flex max-h-[85dvh] flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <div className="flex items-center gap-4">
             <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full bg-surface-low">
               {avatarPreview ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={avatarPreview}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
+                <img src={avatarPreview} alt="" className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-on-surface-variant">
                   <UserRound className="h-8 w-8" />
@@ -113,42 +210,152 @@ function StudentFormModal({
               JPEG / PNG / WebP, tối đa 2MB. Ảnh lưu sau khi tạo hoặc khi lưu chỉnh sửa.
             </p>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-foreground">
-              Họ tên <span className="text-danger">*</span>
-            </label>
-            <input
-              className="input"
-              required
-              value={form.full_name}
-              onChange={(e) => onChange({ full_name: e.target.value })}
-            />
+
+          <SectionTitle>Thông tin cơ bản</SectionTitle>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Họ tên" required>
+              <input
+                className="input"
+                required
+                value={form.full_name}
+                onChange={(e) => onChange({ full_name: e.target.value })}
+              />
+            </Field>
+            <Field label="Tên tiếng Anh">
+              <input
+                className="input"
+                value={form.english_name}
+                onChange={(e) => onChange({ english_name: e.target.value })}
+              />
+            </Field>
+            <Field
+              label="Ngày sinh"
+              hint={age != null ? `Tuổi: ${age}` : undefined}
+            >
+              <input
+                className="input"
+                type="date"
+                value={form.date_of_birth}
+                onChange={(e) => onChange({ date_of_birth: e.target.value })}
+              />
+            </Field>
+            <Field label="Giới tính">
+              <select
+                className="input"
+                value={form.gender}
+                onChange={(e) =>
+                  onChange({ gender: e.target.value as StudentForm["gender"] })
+                }
+              >
+                <option value="">—</option>
+                <option value="male">Nam</option>
+                <option value="female">Nữ</option>
+                <option value="other">Khác</option>
+              </select>
+            </Field>
+            <Field label="Trường đang học">
+              <input
+                className="input"
+                value={form.school}
+                onChange={(e) => onChange({ school: e.target.value })}
+              />
+            </Field>
+            <Field label="Dân tộc">
+              <input
+                className="input"
+                value={form.ethnicity}
+                onChange={(e) => onChange({ ethnicity: e.target.value })}
+              />
+            </Field>
+            <Field label="Tôn giáo">
+              <input
+                className="input"
+                value={form.religion}
+                onChange={(e) => onChange({ religion: e.target.value })}
+              />
+            </Field>
+            <Field label="Nơi sinh">
+              <input
+                className="input"
+                value={form.place_of_birth}
+                onChange={(e) => onChange({ place_of_birth: e.target.value })}
+              />
+            </Field>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-foreground">Tên tiếng Anh</label>
-            <input
-              className="input"
-              value={form.english_name}
-              onChange={(e) => onChange({ english_name: e.target.value })}
-            />
+
+          <SectionTitle>Địa chỉ & liên hệ</SectionTitle>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Field label="Quê quán" hint="Ghi rõ xã/phường, huyện/quận, tỉnh/thành phố nếu có">
+                <input
+                  className="input"
+                  value={form.hometown}
+                  onChange={(e) => onChange({ hometown: e.target.value })}
+                />
+              </Field>
+            </div>
+            <div className="sm:col-span-2">
+              <Field label="Hộ khẩu thường trú">
+                <textarea
+                  className="input min-h-[72px] py-2"
+                  value={form.permanent_address}
+                  onChange={(e) => onChange({ permanent_address: e.target.value })}
+                />
+              </Field>
+            </div>
+            <div className="sm:col-span-2">
+              <Field label="Địa chỉ hiện tại" hint="Nơi ở hiện tại để liên lạc khi cần">
+                <textarea
+                  className="input min-h-[72px] py-2"
+                  value={form.current_address}
+                  onChange={(e) => onChange({ current_address: e.target.value })}
+                />
+              </Field>
+            </div>
+            <Field label="SĐT học sinh">
+              <input
+                className="input"
+                value={form.phone}
+                onChange={(e) => onChange({ phone: e.target.value })}
+              />
+            </Field>
+            <Field label="SĐT phụ huynh">
+              <input
+                className="input"
+                value={form.parent_phone}
+                onChange={(e) => onChange({ parent_phone: e.target.value })}
+              />
+            </Field>
+            <Field label="Email">
+              <input
+                className="input"
+                type="email"
+                value={form.email}
+                onChange={(e) => onChange({ email: e.target.value })}
+              />
+            </Field>
+            <div className="sm:col-span-2">
+              <Field label="Ghi chú">
+                <textarea
+                  className="input min-h-[72px] py-2"
+                  value={form.notes}
+                  onChange={(e) => onChange({ notes: e.target.value })}
+                />
+              </Field>
+            </div>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-foreground">SĐT phụ huynh</label>
-            <input
-              className="input"
-              value={form.parent_phone}
-              onChange={(e) => onChange({ parent_phone: e.target.value })}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-foreground">Ghi chú</label>
-            <textarea
-              className="input min-h-[88px]"
-              value={form.notes}
-              onChange={(e) => onChange({ notes: e.target.value })}
-            />
-          </div>
+
+          <SectionTitle>Thông tin gia đình</SectionTitle>
+          <FamilyBlock title="Cha" prefix="father" form={form} onChange={onChange} />
+          <FamilyBlock title="Mẹ" prefix="mother" form={form} onChange={onChange} />
+          <FamilyBlock
+            title="Người giám hộ"
+            prefix="guardian"
+            form={form}
+            onChange={onChange}
+          />
         </div>
+
         <div className="flex items-center justify-end gap-2 border-t border-surface-low px-6 py-4">
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Hủy
@@ -176,7 +383,7 @@ function StudentsContent() {
   const [canManage, setCanManage] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<LmsStudent | null>(null);
-  const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
+  const [form, setForm] = useState<StudentForm>(EMPTY_STUDENT_FORM);
   const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
@@ -215,7 +422,6 @@ function StudentsContent() {
       })
       .catch((e) => toast.error(e.message))
       .finally(() => setLoading(false));
-     
   }, []);
 
   function resetAvatarState() {
@@ -226,13 +432,13 @@ function StudentsContent() {
   function closeModal() {
     setShowCreate(false);
     setEditing(null);
-    setForm(EMPTY_FORM);
+    setForm(EMPTY_STUDENT_FORM);
     resetAvatarState();
   }
 
   function openCreate() {
     setEditing(null);
-    setForm(EMPTY_FORM);
+    setForm(EMPTY_STUDENT_FORM);
     resetAvatarState();
     setShowCreate(true);
   }
@@ -240,12 +446,7 @@ function StudentsContent() {
   function openEdit(student: LmsStudent) {
     setShowCreate(false);
     setEditing(student);
-    setForm({
-      full_name: student.full_name || "",
-      english_name: student.english_name || "",
-      parent_phone: student.parent_phone || "",
-      notes: student.notes || "",
-    });
+    setForm(studentToForm(student));
     setPendingAvatar(null);
     setAvatarPreview(avatarSrc(student.avatar));
   }
@@ -262,12 +463,7 @@ function StudentsContent() {
 
   function saveStudent(e: FormEvent) {
     e.preventDefault();
-    const body = {
-      full_name: form.full_name.trim(),
-      english_name: form.english_name.trim() || null,
-      parent_phone: form.parent_phone.trim() || null,
-      notes: form.notes.trim() || null,
-    };
+    const body = studentFormToBody(form);
     startTransition(async () => {
       try {
         if (editing) {
@@ -361,13 +557,14 @@ function StudentsContent() {
                 <th className="py-2">Họ tên</th>
                 <th>Tên EN</th>
                 <th>Lớp / trạng thái</th>
-                <th>SĐT PH</th>
+                <th>SĐT</th>
                 {canManage || isAdmin ? <th className="text-right">Hành động</th> : null}
               </tr>
             </thead>
             <tbody>
               {items.map((s) => {
                 const thumb = avatarSrc(s.avatar);
+                const phoneDisplay = s.parent_phone || s.phone || "—";
                 return (
                   <tr key={s.id} className="border-b border-border/70">
                     <td className="py-2">
@@ -389,7 +586,7 @@ function StudentsContent() {
                         .map((e) => `${e.class_code || e.class_id} (${e.status_name || e.status})`)
                         .join(", ") || "—"}
                     </td>
-                    <td>{s.parent_phone || "—"}</td>
+                    <td>{phoneDisplay}</td>
                     {canManage || isAdmin ? (
                       <td className="py-2 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -418,9 +615,9 @@ function StudentsContent() {
             </tbody>
           </table>
         )}
-        {!loading && !items.length && (
+        {!loading && !items.length ? (
           <p className="py-6 text-center text-sm text-slate-500">Không có học viên.</p>
-        )}
+        ) : null}
       </div>
       {modalOpen ? (
         <StudentFormModal
