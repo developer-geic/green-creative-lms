@@ -86,6 +86,33 @@ function shortDate(iso: string) {
   return `${h.day}/${h.month}`;
 }
 
+function formatDateVi(iso?: string | null): string {
+  if (!iso) return "";
+  const [y, m, d] = String(iso).slice(0, 10).split("-");
+  if (!y || !m || !d) return "";
+  return `${d}/${m}/${y}`;
+}
+
+function formatClassWindow(start?: string | null, end?: string | null): string {
+  const a = formatDateVi(start);
+  const b = formatDateVi(end);
+  if (a && b) return `${a} – ${b}`;
+  if (a) return `Từ ${a}`;
+  if (b) return `Đến ${b}`;
+  return "";
+}
+
+function isDateInClassWindow(
+  date: string,
+  start?: string | null,
+  end?: string | null,
+): boolean {
+  const day = date.slice(0, 10);
+  if (start && day < start.slice(0, 10)) return false;
+  if (end && day > end.slice(0, 10)) return false;
+  return true;
+}
+
 function AttendanceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -97,7 +124,12 @@ function AttendanceContent() {
   const [year, setYear] = useState(Number(searchParams.get("year") || now.getFullYear()));
   const [month, setMonth] = useState(Number(searchParams.get("month") || now.getMonth() + 1));
   const [data, setData] = useState<{
-    class?: { is_locked?: boolean; code?: string };
+    class?: {
+      is_locked?: boolean;
+      code?: string;
+      start_date?: string | null;
+      end_date?: string | null;
+    };
     sessions?: Array<{ id: number; session_date: string }>;
     dates?: string[];
     grid?: Array<{
@@ -113,6 +145,7 @@ function AttendanceContent() {
 
   const pendingList = useMemo(() => Object.values(pending), [pending]);
   const dirty = pendingList.length > 0;
+  const classWindowLabel = formatClassWindow(data?.class?.start_date, data?.class?.end_date);
 
   useEffect(() => {
     lmsApi.classes("?limit=100").then((res) => {
@@ -176,6 +209,12 @@ function AttendanceContent() {
     to: string,
     fromServer: string,
   ) {
+    if (
+      !isDateInClassWindow(date, data?.class?.start_date, data?.class?.end_date)
+    ) {
+      toast.error("Ngày điểm danh phải nằm trong khoảng khai giảng – kết thúc của lớp.");
+      return;
+    }
     const sessionId = sessionByDate[date];
     if (!sessionId) return;
     const key = pendingKey(studentId, date);
@@ -234,6 +273,13 @@ function AttendanceContent() {
 
   async function saveAll() {
     if (!pendingList.length) return;
+    const outOfWindow = pendingList.filter(
+      (cell) => !isDateInClassWindow(cell.date, data?.class?.start_date, data?.class?.end_date),
+    );
+    if (outOfWindow.length) {
+      toast.error("Ngày điểm danh phải nằm trong khoảng khai giảng – kết thúc của lớp.");
+      return;
+    }
     setSaving(true);
     try {
       const bySession = new Map<number, Array<{ student_id: number; status: string | null }>>();
@@ -284,6 +330,12 @@ function AttendanceContent() {
               <span>{selectedClass?.time || "—"}</span>
               <span>•</span>
               <span>{selectedClass?.room || "—"}</span>
+              {classWindowLabel ? (
+                <>
+                  <span>•</span>
+                  <span>Khai giảng – kết thúc: {classWindowLabel}</span>
+                </>
+              ) : null}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -431,6 +483,11 @@ function AttendanceContent() {
                       const serverStatus = row.cells?.[d]?.status || "";
                       const status = cellValue(row.student.id, d, serverStatus);
                       const isDirty = !!pending[pendingKey(row.student.id, d)];
+                      const outsideWindow = !isDateInClassWindow(
+                        d,
+                        data.class?.start_date,
+                        data.class?.end_date,
+                      );
                       return (
                         <td key={d} className="px-1.5 py-2.5 text-center">
                           <SelectField
@@ -441,8 +498,9 @@ function AttendanceContent() {
                               optionClass(status),
                               "justify-center border border-transparent focus-visible:border-primary/30",
                               isDirty && "ring-2 ring-primary/35",
+                              outsideWindow && "opacity-50",
                             )}
-                            disabled={data.class?.is_locked}
+                            disabled={!!data.class?.is_locked || outsideWindow}
                             value={status}
                             options={ATT_SELECT_OPTIONS}
                             onChange={(to) =>

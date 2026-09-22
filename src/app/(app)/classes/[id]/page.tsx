@@ -99,12 +99,29 @@ export default function ClassDetailPage() {
 
   if (!data) return <div>Đang tải...</div>;
 
+  const startLabel = data.start_date
+    ? String(data.start_date).slice(0, 10).split("-").reverse().join("/")
+    : "";
+  const endLabel = data.end_date
+    ? String(data.end_date).slice(0, 10).split("-").reverse().join("/")
+    : "";
+  const dateLabel =
+    startLabel && endLabel
+      ? `${startLabel} – ${endLabel}`
+      : startLabel
+        ? `Từ ${startLabel}`
+        : endLabel
+          ? `Đến ${endLabel}`
+          : "";
+
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-primary-dark">{data.code}</h1>
         <p className="text-sm text-slate-500">
-          {data.course || "—"} · {data.program || "—"} · {data.schedule} · {data.time} · {data.room}
+          {[data.course || "—", data.program || "—", data.schedule, data.time, data.room, dateLabel]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
         <div className="mt-2">
           <span

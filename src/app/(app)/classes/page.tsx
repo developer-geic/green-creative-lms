@@ -39,6 +39,23 @@ const STATUS_OPTIONS = [
   { value: "ended", label: STATUS_LABELS.ended },
 ];
 
+function formatClassDate(value?: string | null): string {
+  if (!value) return "";
+  const raw = String(value).slice(0, 10);
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return raw;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+function formatClassDateRange(start?: string | null, end?: string | null): string {
+  const a = formatClassDate(start);
+  const b = formatClassDate(end);
+  if (a && b) return `${a} – ${b}`;
+  if (a) return `Từ ${a}`;
+  if (b) return `Đến ${b}`;
+  return "";
+}
+
 type PendingAction =
   | { type: "status"; id: number; code: string; status: string }
   | { type: "end"; id: number; code: string }
@@ -92,6 +109,8 @@ function ClassesContent() {
     teacher_ids: [] as number[],
     min_class_size: "5",
     max_class_size: "15",
+    start_date: "",
+    end_date: "",
   });
 
   const modalOpen = showCreate || editing != null;
@@ -105,6 +124,8 @@ function ClassesContent() {
     teacher_ids: [] as number[],
     min_class_size: "5",
     max_class_size: "15",
+    start_date: "",
+    end_date: "",
   };
 
   const { items: programs } = useCatalog("programs");
@@ -248,6 +269,8 @@ function ClassesContent() {
       teacher_ids: (c.teachers || []).map((t) => t.lms_user_id),
       min_class_size: String(c.min_class_size ?? 5),
       max_class_size: String(c.max_class_size ?? 15),
+      start_date: c.start_date ? String(c.start_date).slice(0, 10) : "",
+      end_date: c.end_date ? String(c.end_date).slice(0, 10) : "",
     });
   }
 
@@ -270,6 +293,8 @@ function ClassesContent() {
       days: form.days,
       min_class_size: form.min_class_size ? Number(form.min_class_size) : 5,
       max_class_size: form.max_class_size ? Number(form.max_class_size) : 15,
+      start_date: form.start_date || null,
+      end_date: form.end_date || null,
     };
     if (isAdmin) {
       body.teachers = form.teacher_ids.map((lms_user_id) => ({
@@ -278,6 +303,10 @@ function ClassesContent() {
       }));
     }
     return body;
+  }
+
+  function datesInvalid(): boolean {
+    return !!(form.start_date && form.end_date && form.end_date < form.start_date);
   }
 
   async function createClassNow() {
@@ -294,6 +323,10 @@ function ClassesContent() {
     }
     if (max < min) {
       toast.error("Sĩ số tối đa phải ≥ sĩ số tối thiểu");
+      return;
+    }
+    if (datesInvalid()) {
+      toast.error("Ngày kết thúc phải sau hoặc bằng ngày khai giảng");
       return;
     }
     try {
@@ -321,6 +354,10 @@ function ClassesContent() {
       }
       if (max < min) {
         toast.error("Sĩ số tối đa phải ≥ sĩ số tối thiểu");
+        return;
+      }
+      if (datesInvalid()) {
+        toast.error("Ngày kết thúc phải sau hoặc bằng ngày khai giảng");
         return;
       }
       setPendingAction({ type: "update" });
@@ -561,6 +598,7 @@ function ClassesContent() {
               {items.map((c) => {
                 const max = c.max_class_size || 15;
                 const pct = max > 0 ? Math.round(((c.active_student_count || 0) / max) * 100) : 0;
+                const dateRange = formatClassDateRange(c.start_date, c.end_date);
                 return (
                   <tr
                     key={c.id}
@@ -585,6 +623,9 @@ function ClassesContent() {
                       <div className="flex flex-col">
                         <span className="font-medium">{c.schedule || "—"}</span>
                         <span className="text-[11px] text-on-surface-variant">{c.time || ""}</span>
+                        {dateRange ? (
+                          <span className="text-[11px] text-on-surface-variant">{dateRange}</span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-4 py-3.5">
@@ -859,7 +900,7 @@ function ClassesContent() {
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-foreground">Khung giờ học</label>
                   <TimeRangeField
@@ -874,6 +915,27 @@ function ClassesContent() {
                     placeholder="T3 - T5 - T7"
                     value={form.schedule}
                     onChange={(e) => setForm({ ...form, schedule: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-foreground">Ngày khai giảng</label>
+                  <input
+                    className="input"
+                    type="date"
+                    value={form.start_date}
+                    onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-foreground">Ngày kết thúc</label>
+                  <input
+                    className="input"
+                    type="date"
+                    value={form.end_date}
+                    min={form.start_date || undefined}
+                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
                   />
                 </div>
               </div>

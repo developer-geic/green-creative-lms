@@ -4,15 +4,26 @@ import {
   FormEvent,
   Suspense,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useTransition,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Camera, Pencil, Plus, Trash2, UserRound, XCircle } from "lucide-react";
+import {
+  BookOpen,
+  Camera,
+  Pencil,
+  Plus,
+  Trash2,
+  UserRound,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { SearchField } from "@/components/SearchField";
+import { SelectField } from "@/components/SelectField";
+import { useCatalog } from "@/hooks/useCatalog";
 import { lmsApi } from "@/lib/api";
 import { avatarSrc } from "@/lib/avatar";
 import { buildQuery } from "@/lib/utils";
@@ -55,6 +66,23 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
       <h4 className="text-sm font-semibold text-foreground">{children}</h4>
     </div>
   );
+}
+
+function enrollableClasses(classes: LmsClass[], student: LmsStudent | null): LmsClass[] {
+  const enrolled = new Set((student?.enrollments || []).map((e) => e.class_id));
+  return classes.filter((c) => !c.is_locked && !enrolled.has(c.id));
+}
+
+function classEditable(classes: LmsClass[], classId: number): boolean {
+  const c = classes.find((x) => x.id === classId);
+  return !!c && !c.is_locked;
+}
+
+function classLabel(c: LmsClass): string {
+  const bits = [c.code];
+  if (c.course) bits.push(c.course);
+  if (c.time) bits.push(c.time);
+  return bits.join(" · ");
 }
 
 function FamilyBlock({
@@ -126,27 +154,321 @@ function FamilyBlock({
   );
 }
 
+function EnrollDialog({
+  student,
+  classes,
+  statuses,
+  onClose,
+  onEnrolled,
+}: {
+  student: LmsStudent;
+  classes: LmsClass[];
+  statuses: Array<{ code: string; name: string }>;
+  onClose: () => void;
+  onEnrolled: () => void;
+}) {
+  const options = enrollableClasses(classes, student);
+  const [classId, setClassId] = useState(options[0] ? String(options[0].id) : "");
+  const [status, setStatus] = useState("active");
+  const [enrolling, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!options.some((c) => String(c.id) === classId)) {
+      setClassId(options[0] ? String(options[0].id) : "");
+    }
+  }, [options, classId]);
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!classId) {
+      toast.error("Chọn lớp để ghi danh");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await lmsApi.createEnrollment(classId, {
+          student_id: student.id,
+          status,
+        });
+        toast.success("Đã ghi danh học viên vào lớp");
+        onEnrolled();
+        onClose();
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Không ghi danh được");
+      }
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#213145]/40 p-4 backdrop-blur-sm">
+      <form
+        onSubmit={submit}
+        className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
+      >
+        <div className="flex items-center justify-between bg-surface-low px-5 py-4">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Ghi danh vào lớp</h3>
+            <p className="text-xs text-on-surface-variant">{student.full_name}</p>
+          </div>
+          <button
+            type="button"
+            className="rounded-lg p-1.5 text-on-surface-variant hover:bg-surface-high"
+            onClick={onClose}
+          >
+            <XCircle className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="space-y-3 p-5">
+          {options.length === 0 ? (
+            <p className="text-sm text-on-surface-variant">
+              Không còn lớp khả dụng (chưa được gán lớp, lớp đã khóa, hoặc học viên đã có trong mọi
+              lớp của bạn).
+            </p>
+          ) : (
+            <>
+              <Field label="Lớp" required>
+                <SelectField
+                  required
+                  value={classId}
+                  placeholder="- Chọn lớp -"
+                  options={options.map((c) => ({
+                    value: String(c.id),
+                    label: classLabel(c),
+                  }))}
+                  onChange={setClassId}
+                />
+              </Field>
+              <Field label="Trạng thái">
+                <SelectField
+                  value={status}
+                  options={
+                    statuses.length
+                      ? statuses.map((s) => ({ value: s.code, label: s.name }))
+                      : [{ value: "active", label: "Đang học" }]
+                  }
+                  onChange={setStatus}
+                />
+              </Field>
+            </>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-surface-low px-5 py-4">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Hủy
+          </button>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={enrolling || options.length === 0}
+          >
+            Ghi danh
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function EnrollmentSection({
+  student,
+  classes,
+  statuses,
+  canEnroll,
+  onChanged,
+}: {
+  student: LmsStudent;
+  classes: LmsClass[];
+  statuses: Array<{ code: string; name: string }>;
+  canEnroll: boolean;
+  onChanged: () => void;
+}) {
+  const options = enrollableClasses(classes, student);
+  const [classId, setClassId] = useState("");
+  const [status, setStatus] = useState("active");
+  const [busy, startTransition] = useTransition();
+
+  if (!canEnroll) return null;
+
+  function addEnrollment() {
+    if (!classId) {
+      toast.error("Chọn lớp để ghi danh");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await lmsApi.createEnrollment(classId, {
+          student_id: student.id,
+          status,
+        });
+        toast.success("Đã ghi danh vào lớp");
+        setClassId("");
+        onChanged();
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Không ghi danh được");
+      }
+    });
+  }
+
+  function changeStatus(enrollmentId: number, classIdNum: number, next: string) {
+    startTransition(async () => {
+      try {
+        await lmsApi.updateEnrollment(classIdNum, enrollmentId, { status: next });
+        toast.success("Đã cập nhật trạng thái");
+        onChanged();
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Không cập nhật được");
+      }
+    });
+  }
+
+  function removeEnrollment(enrollmentId: number, classIdNum: number, label: string) {
+    if (!confirm(`Gỡ học viên khỏi lớp ${label}?`)) return;
+    startTransition(async () => {
+      try {
+        await lmsApi.deleteEnrollment(classIdNum, enrollmentId);
+        toast.success("Đã gỡ khỏi lớp");
+        onChanged();
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Không gỡ được");
+      }
+    });
+  }
+
+  return (
+    <>
+      <SectionTitle>Lớp đang tham gia</SectionTitle>
+      <div className="space-y-2">
+        {(student.enrollments || []).length === 0 ? (
+          <p className="text-xs text-on-surface-variant">Chưa ghi danh lớp nào.</p>
+        ) : (
+          (student.enrollments || []).map((e) => {
+            const editable = classEditable(classes, e.class_id);
+            return (
+              <div
+                key={e.id}
+                className="flex flex-col gap-2 rounded-lg border border-border bg-surface-low/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-foreground">
+                    {e.class_code || `Lớp #${e.class_id}`}
+                  </div>
+                  {!editable ? (
+                    <div className="text-[11px] text-on-surface-variant">
+                      {e.status_name || e.status || "—"}
+                    </div>
+                  ) : null}
+                </div>
+                {editable ? (
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="input h-8 w-auto min-w-[8rem] text-xs"
+                      value={e.status || "active"}
+                      disabled={busy}
+                      onChange={(ev) => changeStatus(e.id, e.class_id, ev.target.value)}
+                    >
+                      {(statuses.length
+                        ? statuses
+                        : [{ code: e.status || "active", name: e.status_name || e.status || "—" }]
+                      ).map((s) => (
+                        <option key={s.code} value={s.code}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="rounded-md p-1.5 text-danger hover:bg-danger-container"
+                      title="Gỡ khỏi lớp"
+                      disabled={busy}
+                      onClick={() =>
+                        removeEnrollment(e.id, e.class_id, e.class_code || String(e.class_id))
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8rem_auto]">
+        <Field label="Thêm vào lớp">
+          {options.length === 0 ? (
+            <p className="text-xs text-on-surface-variant">Không còn lớp khả dụng để ghi danh.</p>
+          ) : (
+            <SelectField
+              value={classId}
+              placeholder="- Chọn lớp -"
+              options={[
+                { value: "", label: "- Chọn lớp -" },
+                ...options.map((c) => ({ value: String(c.id), label: classLabel(c) })),
+              ]}
+              onChange={setClassId}
+            />
+          )}
+        </Field>
+        <Field label="Trạng thái">
+          <SelectField
+            value={status}
+            options={
+              statuses.length
+                ? statuses.map((s) => ({ value: s.code, label: s.name }))
+                : [{ value: "active", label: "Đang học" }]
+            }
+            onChange={setStatus}
+          />
+        </Field>
+        <div className="flex items-end">
+          <button
+            type="button"
+            className="btn btn-primary w-full"
+            disabled={busy || !classId || options.length === 0}
+            onClick={addEnrollment}
+          >
+            Ghi danh
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function StudentFormModal({
   editing,
   pending,
   form,
   avatarPreview,
+  classes,
+  statuses,
+  canEnroll,
+  enrollClassId,
+  onEnrollClassIdChange,
   onChange,
   onAvatarPick,
   onClose,
   onSubmit,
+  onEnrollmentChanged,
 }: {
   editing: LmsStudent | null;
   pending: boolean;
   form: StudentForm;
   avatarPreview: string | null;
+  classes: LmsClass[];
+  statuses: Array<{ code: string; name: string }>;
+  canEnroll: boolean;
+  enrollClassId: string;
+  onEnrollClassIdChange: (v: string) => void;
   onChange: (patch: Partial<StudentForm>) => void;
   onAvatarPick: (file: File | null) => void;
   onClose: () => void;
   onSubmit: (e: FormEvent) => void;
+  onEnrollmentChanged: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const age = ageFromDob(form.date_of_birth);
+  const createEnrollOptions = enrollableClasses(classes, null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#213145]/40 p-4 backdrop-blur-sm">
@@ -165,8 +487,8 @@ function StudentFormModal({
               </h3>
               <span className="text-xs text-on-surface-variant">
                 {editing
-                  ? "Cập nhật hồ sơ master, áp dụng cho mọi lớp đã enroll"
-                  : "Tạo hồ sơ master để enroll vào lớp sau"}
+                  ? "Cập nhật hồ sơ master và lớp đang tham gia"
+                  : "Tạo hồ sơ master, có thể ghi danh lớp ngay"}
               </span>
             </div>
           </div>
@@ -228,10 +550,7 @@ function StudentFormModal({
                 onChange={(e) => onChange({ english_name: e.target.value })}
               />
             </Field>
-            <Field
-              label="Ngày sinh"
-              hint={age != null ? `Tuổi: ${age}` : undefined}
-            >
+            <Field label="Ngày sinh" hint={age != null ? `Tuổi: ${age}` : undefined}>
               <input
                 className="input"
                 type="date"
@@ -348,12 +667,43 @@ function StudentFormModal({
           <SectionTitle>Thông tin gia đình</SectionTitle>
           <FamilyBlock title="Cha" prefix="father" form={form} onChange={onChange} />
           <FamilyBlock title="Mẹ" prefix="mother" form={form} onChange={onChange} />
-          <FamilyBlock
-            title="Người giám hộ"
-            prefix="guardian"
-            form={form}
-            onChange={onChange}
-          />
+          <FamilyBlock title="Người giám hộ" prefix="guardian" form={form} onChange={onChange} />
+
+          {editing && canEnroll ? (
+            <EnrollmentSection
+              student={editing}
+              classes={classes}
+              statuses={statuses}
+              canEnroll={canEnroll}
+              onChanged={onEnrollmentChanged}
+            />
+          ) : null}
+
+          {!editing && canEnroll ? (
+            <>
+              <SectionTitle>Ghi danh ngay (tuỳ chọn)</SectionTitle>
+              <Field label="Lớp">
+                {createEnrollOptions.length === 0 ? (
+                  <p className="text-xs text-on-surface-variant">
+                    Không có lớp khả dụng để ghi danh ngay.
+                  </p>
+                ) : (
+                  <SelectField
+                    value={enrollClassId}
+                    placeholder="- Không ghi danh -"
+                    options={[
+                      { value: "", label: "- Không ghi danh -" },
+                      ...createEnrollOptions.map((c) => ({
+                        value: String(c.id),
+                        label: classLabel(c),
+                      })),
+                    ]}
+                    onChange={onEnrollClassIdChange}
+                  />
+                )}
+              </Field>
+            </>
+          ) : null}
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-surface-low px-6 py-4">
@@ -383,10 +733,20 @@ function StudentsContent() {
   const [canManage, setCanManage] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<LmsStudent | null>(null);
+  const [enrollTarget, setEnrollTarget] = useState<LmsStudent | null>(null);
   const [form, setForm] = useState<StudentForm>(EMPTY_STUDENT_FORM);
   const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [createEnrollClassId, setCreateEnrollClassId] = useState("");
+  const { items: statusItems } = useCatalog("student-statuses");
 
+  const statuses = useMemo(
+    () => statusItems.map((s) => ({ code: s.code, name: s.name })),
+    [statusItems],
+  );
+
+  const canEnroll = isAdmin || classes.some((c) => !c.is_locked);
+  const showActions = canManage || isAdmin || canEnroll;
   const modalOpen = showCreate || editing != null;
 
   function loadStudents(nextQ = q, nextClassId = classId) {
@@ -397,7 +757,16 @@ function StudentsContent() {
       .students(query)
       .then((res) => {
         startTransition(() => {
-          setItems(res.data || []);
+          const list: LmsStudent[] = res.data || [];
+          setItems(list);
+          setEditing((prev) => {
+            if (!prev) return prev;
+            return list.find((s: LmsStudent) => s.id === prev.id) || prev;
+          });
+          setEnrollTarget((prev) => {
+            if (!prev) return prev;
+            return list.find((s: LmsStudent) => s.id === prev.id) || prev;
+          });
           setLoading(false);
         });
       })
@@ -422,6 +791,7 @@ function StudentsContent() {
       })
       .catch((e) => toast.error(e.message))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function resetAvatarState() {
@@ -433,12 +803,14 @@ function StudentsContent() {
     setShowCreate(false);
     setEditing(null);
     setForm(EMPTY_STUDENT_FORM);
+    setCreateEnrollClassId("");
     resetAvatarState();
   }
 
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_STUDENT_FORM);
+    setCreateEnrollClassId("");
     resetAvatarState();
     setShowCreate(true);
   }
@@ -478,7 +850,24 @@ function StudentsContent() {
           if (pendingAvatar && created?.id) {
             await lmsApi.uploadStudentAvatar(created.id, pendingAvatar);
           }
-          toast.success("Đã thêm học viên");
+          if (canEnroll && createEnrollClassId && created?.id) {
+            try {
+              await lmsApi.createEnrollment(createEnrollClassId, {
+                student_id: created.id,
+                status: "active",
+              });
+              toast.success("Đã thêm học viên và ghi danh vào lớp");
+            } catch (enrollErr: unknown) {
+              toast.success("Đã thêm học viên");
+              toast.error(
+                enrollErr instanceof Error
+                  ? enrollErr.message
+                  : "Tạo học viên OK nhưng ghi danh lớp thất bại",
+              );
+            }
+          } else {
+            toast.success("Đã thêm học viên");
+          }
         }
         closeModal();
         loadStudents();
@@ -508,7 +897,7 @@ function StudentsContent() {
         <div>
           <h1 className="text-2xl font-bold text-primary-dark">Học viên</h1>
           <p className="text-sm text-on-surface-variant">
-            Hồ sơ master dùng chung nhiều lớp. Enroll vào lớp từ chi tiết lớp học.
+            Hồ sơ master dùng chung nhiều lớp. Ghi danh vào lớp ngay tại đây (lớp theo quyền của bạn).
           </p>
         </div>
         {canManage || isAdmin ? (
@@ -558,7 +947,7 @@ function StudentsContent() {
                 <th>Tên EN</th>
                 <th>Lớp / trạng thái</th>
                 <th>SĐT</th>
-                {canManage || isAdmin ? <th className="text-right">Hành động</th> : null}
+                {showActions ? <th className="text-right">Hành động</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -587,25 +976,39 @@ function StudentsContent() {
                         .join(", ") || "—"}
                     </td>
                     <td>{phoneDisplay}</td>
-                    {canManage || isAdmin ? (
+                    {showActions ? (
                       <td className="py-2 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
-                            title="Sửa"
-                            onClick={() => openEdit(s)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
-                            title="Xóa"
-                            onClick={() => removeStudent(s)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {canEnroll ? (
+                            <button
+                              type="button"
+                              className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
+                              title="Ghi danh vào lớp"
+                              onClick={() => setEnrollTarget(s)}
+                            >
+                              <BookOpen className="h-4 w-4" />
+                            </button>
+                          ) : null}
+                          {canManage || isAdmin ? (
+                            <>
+                              <button
+                                type="button"
+                                className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
+                                title="Sửa"
+                                onClick={() => openEdit(s)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
+                                title="Xóa"
+                                onClick={() => removeStudent(s)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          ) : null}
                         </div>
                       </td>
                     ) : null}
@@ -625,10 +1028,25 @@ function StudentsContent() {
           pending={pending}
           form={form}
           avatarPreview={avatarPreview}
+          classes={classes}
+          statuses={statuses}
+          canEnroll={canEnroll}
+          enrollClassId={createEnrollClassId}
+          onEnrollClassIdChange={setCreateEnrollClassId}
           onChange={patchForm}
           onAvatarPick={onAvatarPick}
           onClose={closeModal}
           onSubmit={saveStudent}
+          onEnrollmentChanged={loadStudents}
+        />
+      ) : null}
+      {enrollTarget ? (
+        <EnrollDialog
+          student={enrollTarget}
+          classes={classes}
+          statuses={statuses}
+          onClose={() => setEnrollTarget(null)}
+          onEnrolled={loadStudents}
         />
       ) : null}
     </div>
