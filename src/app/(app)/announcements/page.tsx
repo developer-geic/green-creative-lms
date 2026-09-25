@@ -7,6 +7,7 @@ import { Bell, PenLine, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { lmsApi } from "@/lib/api";
 import { buildQuery, cn } from "@/lib/utils";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const POLL_MS = 120_000;
 
@@ -152,6 +153,8 @@ function AnnouncementsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const { can } = usePermissions();
+  const canCreate = can("announcements.create");
   const userName =
     (session?.user as { name?: string } | undefined)?.name ||
     (session?.user as { email?: string } | undefined)?.email ||
@@ -258,6 +261,7 @@ function AnnouncementsContent() {
         ) : null}
       </div>
 
+      {canCreate ? (
       <button
         type="button"
         onClick={openModal}
@@ -275,6 +279,7 @@ function AnnouncementsContent() {
           Viết thông báo
         </span>
       </button>
+      ) : null}
 
       <div className="flex gap-1 rounded-xl bg-surface-low p-1">
         {FILTERS.map((f) => {

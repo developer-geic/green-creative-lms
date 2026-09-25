@@ -289,7 +289,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-xs text-on-surface-variant">Lớp {x.class_code}</div>
                   <Link
-                    href={`/reports?q=${encodeURIComponent(x.name)}`}
+                    href={`/students?q=${encodeURIComponent(x.name)}`}
                     className="mt-1 text-center text-[11px] font-semibold text-primary hover:underline"
                   >
                     Xem hồ sơ →

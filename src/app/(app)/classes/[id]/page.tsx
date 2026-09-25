@@ -2,17 +2,17 @@
 
 import { FormEvent, useDeferredValue, useEffect, useState, useTransition } from "react";
 import { notFound, useParams } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { useCatalog } from "@/hooks/useCatalog";
+import { usePermissions } from "@/hooks/usePermissions";
 import { SearchField } from "@/components/SearchField";
 import { lmsApi } from "@/lib/api";
 
 export default function ClassDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const { data: session } = useSession();
-  const isAdmin = (session?.user as any)?.role === "admin";
+  const { can } = usePermissions();
+  const canCreateStudents = can("students.create");
   const [data, setData] = useState<any>(null);
   const [missing, setMissing] = useState(false);
   const [mode, setMode] = useState<"existing" | "new">("existing");
@@ -22,7 +22,6 @@ export default function ClassDetailPage() {
   const [masterQuery, setMasterQuery] = useState("");
   const deferredQuery = useDeferredValue(masterQuery);
   const [masters, setMasters] = useState<any[]>([]);
-  const [canManageStudents, setCanManageStudents] = useState(false);
   const [pending, startTransition] = useTransition();
   const { items: statuses } = useCatalog("student-statuses");
 
@@ -41,11 +40,6 @@ export default function ClassDetailPage() {
 
   useEffect(() => {
     load();
-    lmsApi.me().then((res) => {
-      const role = res.data?.user?.role;
-      const flags = res.data?.user?.catalog_permissions;
-      setCanManageStudents(role === "admin" || !!flags?.manage_students);
-    });
   }, [id]);
 
   useEffect(() => {
@@ -158,7 +152,7 @@ export default function ClassDetailPage() {
               >
                 Chọn HV có sẵn
               </button>
-              {(isAdmin || canManageStudents) && (
+              {canCreateStudents ? (
                 <button
                   type="button"
                   className={`btn !py-1 ${mode === "new" ? "btn-primary" : "btn-ghost"}`}
@@ -166,8 +160,7 @@ export default function ClassDetailPage() {
                 >
                   Thêm HV mới
                 </button>
-              )}
-            </div>
+              ) : null}            </div>
             {mode === "existing" ? (
               <>
                 <SearchField

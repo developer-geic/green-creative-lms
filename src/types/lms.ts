@@ -14,8 +14,11 @@ export type LmsUser = {
   avatar?: string | null;
   phone?: string | null;
   role: "admin" | "teacher" | null;
+  lms_role_id?: number | null;
+  role_detail?: { id: number; code: string; name: string } | null;
   status: "pending" | "approved" | "disabled";
   catalog_permissions?: CatalogPermissions;
+  permissions?: string[];
 };
 
 export type LmsCatalogItem = {
@@ -178,4 +181,156 @@ export type UserDetailPayload = {
   teacher_profile?: TeacherProfile | null;
   classes?: UserDetailClassAssignment[];
   change_requests?: TeacherProfileChangeRequest[];
+};
+
+export type AssessmentPeriod = "mid" | "final";
+
+export type LmsAssessmentRecord = {
+  id: number;
+  class_id: number;
+  student_id: number;
+  year: number;
+  month: number;
+  period: AssessmentPeriod;
+  listening?: number | string | null;
+  speaking?: number | string | null;
+  reading?: number | string | null;
+  writing?: number | string | null;
+  general_comment?: string | null;
+  teacher_suggestion?: string | null;
+  tutoring?: string | null;
+  suggestion_1?: string | null;
+  suggestion_2?: string | null;
+};
+
+export type AssessmentAttendanceSummary = {
+  present: number;
+  marked: number;
+  rate: number | null;
+  label: string | null;
+};
+
+export type AssessmentHomeworkSummary = {
+  done: number;
+  total: number;
+  rate: number | null;
+  label: string | null;
+};
+
+export type AssessmentIndexData = {
+  class: {
+    id: number;
+    code: string;
+    course?: string | null;
+    is_locked: boolean;
+    teachers?: Array<{
+      lms_user_id: number;
+      role: string;
+      name?: string | null;
+      email?: string | null;
+    }>;
+  };
+  student: LmsStudent;
+  mid: LmsAssessmentRecord | null;
+  final: LmsAssessmentRecord | null;
+  history: LmsAssessmentRecord[];
+  attendance_summary: AssessmentAttendanceSummary;
+  homework_summary: AssessmentHomeworkSummary;
+};
+
+export type StudentOverviewStats = {
+  marked: number;
+  present: number;
+  unexcused: number;
+  present_rate: number | null;
+  homework_done: number;
+  homework_total: number;
+  homework_rate: number | null;
+};
+
+export type StudentAttendanceHistoryItem = {
+  id: number;
+  date: string | null;
+  status: string | null;
+  status_label: string | null;
+  class_id?: number | null;
+  class_code?: string | null;
+  note?: string | null;
+};
+
+export type StudentProgressHistoryItem = {
+  id: number;
+  date: string | null;
+  class_id?: number | null;
+  class_code?: string | null;
+  homework?: string | null;
+  homework_label?: string | null;
+  absorption?: string | null;
+  absorption_label?: string | null;
+  note?: string | null;
+};
+
+export type StudentAssessmentItem = {
+  id: number;
+  class_id: number;
+  class_code?: string | null;
+  year: number;
+  month: number;
+  period: AssessmentPeriod;
+  period_label: string;
+  listening?: number | string | null;
+  speaking?: number | string | null;
+  reading?: number | string | null;
+  writing?: number | string | null;
+  total?: number | null;
+  general_comment?: string | null;
+  teacher_suggestion?: string | null;
+};
+
+export type StudentOverview = {
+  student: LmsStudent;
+  notes?: string | null;
+  stats: StudentOverviewStats;
+  attendance_history: StudentAttendanceHistoryItem[];
+  progress_history: StudentProgressHistoryItem[];
+  assessments: StudentAssessmentItem[];
+  filters?: {
+    class_id?: number | null;
+    year?: number | null;
+    month?: number | null;
+  };
+};
+
+export type LmsRbacPermission = {
+  id: number;
+  code: string;
+  name: string;
+  group: string;
+  description?: string | null;
+  sort_order: number;
+  is_system: boolean;
+};
+
+export type LmsRbacRole = {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  is_system: boolean;
+  sort_order: number;
+  users_count?: number;
+  permissions?: LmsRbacPermission[];
+};
+
+export type LmsMenuItem = {
+  id: number;
+  label: string;
+  href: string;
+  icon?: string | null;
+  permission_code?: string | null;
+  placement: "sidebar" | "bottom" | string;
+  sort_order: number;
+  is_active?: boolean;
+  also_active_for?: string[];
+  parent_id?: number | null;
 };

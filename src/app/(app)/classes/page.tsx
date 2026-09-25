@@ -23,9 +23,10 @@ import { SearchField } from "@/components/SearchField";
 import { SelectField } from "@/components/SelectField";
 import { TimeRangeField } from "@/components/TimeRangeField";
 import { useCatalog } from "@/hooks/useCatalog";
+import { usePermissions } from "@/hooks/usePermissions";
 import { lmsApi } from "@/lib/api";
 import { buildQuery, cn } from "@/lib/utils";
-import type { CatalogPermissions, LmsClass, LmsUser } from "@/types/lms";
+import type { LmsClass, LmsUser } from "@/types/lms";
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Đang hoạt động",
@@ -79,11 +80,15 @@ function ClassesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session, status: sessionStatus } = useSession();
-  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
+  const { can, ready: permsReady, isAdmin } = usePermissions();
   const [, startTransition] = useTransition();
 
+  const canViewClasses = can("classes.view");
+  const canCreateClasses = can("classes.create");
+  const canUpdateClasses = can("classes.update");
+  const canDeleteClasses = can("classes.delete");
+
   const [accessChecked, setAccessChecked] = useState(false);
-  const [canManageClasses, setCanManageClasses] = useState(false);
   const [teacherOptions, setTeacherOptions] = useState<LmsUser[]>([]);
   const [items, setItems] = useState<LmsClass[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,36 +161,30 @@ function ClassesContent() {
   }, [items]);
 
   useEffect(() => {
-    if (sessionStatus === "loading") return;
-    lmsApi
-      .me()
-      .then(async (res) => {
-        const role = res.data?.user?.role || (session?.user as { role?: string } | undefined)?.role;
-        const flags = (res.data?.user?.catalog_permissions ||
-          null) as CatalogPermissions | null;
-        const admin = role === "admin";
-        const allowed = admin || !!flags?.manage_classes;
-        if (!allowed) {
-          toast.error("Bạn không có quyền quản lý lớp học");
-          router.replace("/");
-          return;
-        }
-        setCanManageClasses(true);
-        setAccessChecked(true);
-        if (admin) {
-          try {
-            const usersRes = await lmsApi.users("?role=teacher&status=approved&limit=100");
-            setTeacherOptions(Array.isArray(usersRes.data) ? usersRes.data : []);
-          } catch {
-            setTeacherOptions([]);
-          }
-        }
-      })
-      .catch((e) => {
-        toast.error(e.message || "Không kiểm tra được quyền");
-        router.replace("/");
-      });
-  }, [sessionStatus, router, session?.user]);
+    if (sessionStatus === "loading" || !permsReady) return;
+    if (!canViewClasses) {
+      toast.error("Bạn không có quyền xem lớp học");
+      router.replace("/");
+      return;
+    }
+    setAccessChecked(true);
+    if (canCreateClasses || canUpdateClasses || isAdmin) {
+      lmsApi
+        .users("?role=teacher&status=approved&limit=100")
+        .then((usersRes) => {
+          setTeacherOptions(Array.isArray(usersRes.data) ? usersRes.data : []);
+        })
+        .catch(() => setTeacherOptions([]));
+    }
+  }, [
+    sessionStatus,
+    permsReady,
+    canViewClasses,
+    canCreateClasses,
+    canUpdateClasses,
+    isAdmin,
+    router,
+  ]);
 
   function load() {
     const query = buildQuery({
@@ -249,14 +248,14 @@ function ClassesContent() {
   }
 
   function openCreate() {
-    if (!isAdmin) return;
+    if (!canCreateClasses) return;
     setEditing(null);
     setForm(emptyForm);
     setShowCreate(true);
   }
 
   function openEdit(c: LmsClass) {
-    if (c.is_locked || !canManageClasses) return;
+    if (c.is_locked || !canUpdateClasses) return;
     setShowCreate(false);
     setEditing(c);
     setForm({
@@ -432,7 +431,7 @@ function ClassesContent() {
     }
   }
 
-  if (!accessChecked || !canManageClasses) {
+  if (!accessChecked || !canViewClasses) {
     return (
       <div className="flex w-full flex-col gap-6">
         <div className="h-10 w-72 animate-pulse rounded-lg bg-surface-low" />
@@ -460,7 +459,7 @@ function ClassesContent() {
             <Download className="h-4 w-4" />
             Xuất Excel
           </button>
-          {isAdmin ? (
+          {canCreateClasses ? (
             <button
               type="button"
               className="btn btn-primary w-full sm:w-auto"
@@ -675,7 +674,7 @@ function ClassesContent() {
                         >
                           <Eye className="h-4 w-4" />
                         </Link>
-                        {!c.is_locked && canManageClasses ? (
+                        {!c.is_locked && canUpdateClasses ? (
                           <button
                             type="button"
                             className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
@@ -685,7 +684,7 @@ function ClassesContent() {
                             <Pencil className="h-4 w-4" />
                           </button>
                         ) : null}
-                        {!c.is_locked && canManageClasses ? (
+                        {!c.is_locked && canUpdateClasses ? (
                           <button
                             type="button"
                             className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
@@ -695,7 +694,7 @@ function ClassesContent() {
                             <XCircle className="h-4 w-4" />
                           </button>
                         ) : null}
-                        {isAdmin && !c.is_locked ? (
+                        {canDeleteClasses && !c.is_locked ? (
                           <button
                             type="button"
                             className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"

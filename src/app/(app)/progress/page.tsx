@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ProgressAssessTabs } from "@/components/ProgressAssessTabs";
 import { SelectField } from "@/components/SelectField";
 import { useCatalog } from "@/hooks/useCatalog";
 import { lmsApi } from "@/lib/api";
@@ -321,6 +322,16 @@ function ProgressContent() {
 
   return (
     <div className={cn("flex w-full flex-col gap-6", dirty && "pb-28")}>
+      <div className="flex flex-col gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-primary-dark">Tiến độ &amp; Đánh giá</h1>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Theo dõi BTVN theo buổi và nhập đánh giá định kỳ học viên.
+          </p>
+        </div>
+        <ProgressAssessTabs />
+      </div>
+
       <div className="relative overflow-hidden rounded-xl bg-surface p-6 shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
         <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
         <div className="relative flex flex-col justify-between gap-4 xl:flex-row xl:items-center">

@@ -3,16 +3,16 @@
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { CatalogTabNav } from "@/components/catalogs/CatalogTabNav";
 import {
   canAccessCatalogs,
+  catalogActionCodes,
   catalogTabsForPermissions,
   type CatalogTab,
 } from "@/components/catalogs/catalogTabs";
 import { useCatalog } from "@/hooks/useCatalog";
-import { lmsApi } from "@/lib/api";
+import { usePermissions } from "@/hooks/usePermissions";
 import type { CatalogPermissions } from "@/types/lms";
 
 const CatalogCrudPanel = dynamic(
@@ -34,31 +34,34 @@ function PanelSkeleton() {
 function CatalogsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session } = useSession();
-  const isAdmin = (session?.user as any)?.role === "admin";
+  const { can, ready: permsReady, isAdmin } = usePermissions();
   const [perms, setPerms] = useState<CatalogPermissions | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    Promise.all([lmsApi.me()])
-      .then(([me]) => {
-        const flags = me.data?.user?.catalog_permissions || null;
-        setPerms(flags);
-        setReady(true);
-        if (!canAccessCatalogs(isAdmin, flags)) {
-          toast.error("Bạn không có quyền quản lý danh mục");
-          router.replace("/dashboard");
-        }
-      })
-      .catch((e) => {
-        toast.error(e.message);
-        setReady(true);
-      });
-  }, [isAdmin, router]);
+    if (!permsReady) return;
+    import("@/lib/api").then(({ lmsApi }) =>
+      lmsApi
+        .me()
+        .then((me) => {
+          const flags = me.data?.user?.catalog_permissions || null;
+          setPerms(flags);
+          setReady(true);
+          if (!canAccessCatalogs(isAdmin, flags, can)) {
+            toast.error("Bạn không có quyền quản lý danh mục");
+            router.replace("/dashboard");
+          }
+        })
+        .catch((e) => {
+          toast.error(e.message);
+          setReady(true);
+        }),
+    );
+  }, [permsReady, isAdmin, router, can]);
 
   const tabs = useMemo(
-    () => catalogTabsForPermissions(isAdmin, perms),
-    [isAdmin, perms],
+    () => catalogTabsForPermissions(isAdmin, perms, can),
+    [isAdmin, perms, can],
   );
 
   const tabParam = searchParams.get("tab") as CatalogTab | null;
@@ -66,6 +69,8 @@ function CatalogsContent() {
     tabParam && tabs.some((t) => t.id === tabParam)
       ? tabParam
       : tabs[0]?.id || "programs";
+
+  const actions = catalogActionCodes(active);
 
   const programs = useCatalog("programs", {
     includeInactive: true,
@@ -92,6 +97,12 @@ function CatalogsContent() {
     return <p className="text-sm text-slate-500">Không có quyền truy cập danh mục.</p>;
   }
 
+  const panelProps = {
+    canCreate: can(actions.create),
+    canUpdate: can(actions.update),
+    canDelete: can(actions.delete),
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -109,6 +120,7 @@ function CatalogsContent() {
           items={programs.items}
           loading={programs.loading}
           onChanged={programs.reload}
+          {...panelProps}
         />
       )}
       {active === "courses" && (
@@ -118,6 +130,7 @@ function CatalogsContent() {
           loading={courses.loading}
           programs={programs.items}
           onChanged={courses.reload}
+          {...panelProps}
         />
       )}
       {active === "statuses" && (
@@ -126,6 +139,7 @@ function CatalogsContent() {
           items={statuses.items}
           loading={statuses.loading}
           onChanged={statuses.reload}
+          {...panelProps}
         />
       )}
       {active === "absorption" && (
@@ -134,6 +148,7 @@ function CatalogsContent() {
           items={absorption.items}
           loading={absorption.loading}
           onChanged={absorption.reload}
+          {...panelProps}
         />
       )}
     </div>

@@ -10,10 +10,10 @@ import {
   useTransition,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";
 import {
-  BookOpen,
+  ArrowLeft,
   Camera,
+  Eye,
   Pencil,
   Plus,
   Trash2,
@@ -24,10 +24,12 @@ import { toast } from "sonner";
 import { SearchField } from "@/components/SearchField";
 import { SelectField } from "@/components/SelectField";
 import { useCatalog } from "@/hooks/useCatalog";
+import { usePermissions } from "@/hooks/usePermissions";
 import { lmsApi } from "@/lib/api";
 import { avatarSrc } from "@/lib/avatar";
 import { buildQuery } from "@/lib/utils";
-import type { LmsClass, LmsStudent } from "@/types/lms";
+import type { LmsClass, LmsStudent, StudentOverview } from "@/types/lms";
+import { LookupOverview } from "./LookupOverview";
 import {
   EMPTY_STUDENT_FORM,
   ageFromDob,
@@ -150,121 +152,6 @@ function FamilyBlock({
           </Field>
         </div>
       </div>
-    </div>
-  );
-}
-
-function EnrollDialog({
-  student,
-  classes,
-  statuses,
-  onClose,
-  onEnrolled,
-}: {
-  student: LmsStudent;
-  classes: LmsClass[];
-  statuses: Array<{ code: string; name: string }>;
-  onClose: () => void;
-  onEnrolled: () => void;
-}) {
-  const options = enrollableClasses(classes, student);
-  const [classId, setClassId] = useState(options[0] ? String(options[0].id) : "");
-  const [status, setStatus] = useState("active");
-  const [enrolling, startTransition] = useTransition();
-
-  useEffect(() => {
-    if (!options.some((c) => String(c.id) === classId)) {
-      setClassId(options[0] ? String(options[0].id) : "");
-    }
-  }, [options, classId]);
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!classId) {
-      toast.error("Chọn lớp để ghi danh");
-      return;
-    }
-    startTransition(async () => {
-      try {
-        await lmsApi.createEnrollment(classId, {
-          student_id: student.id,
-          status,
-        });
-        toast.success("Đã ghi danh học viên vào lớp");
-        onEnrolled();
-        onClose();
-      } catch (err: unknown) {
-        toast.error(err instanceof Error ? err.message : "Không ghi danh được");
-      }
-    });
-  }
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#213145]/40 p-4 backdrop-blur-sm">
-      <form
-        onSubmit={submit}
-        className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
-      >
-        <div className="flex items-center justify-between bg-surface-low px-5 py-4">
-          <div>
-            <h3 className="text-lg font-semibold text-foreground">Ghi danh vào lớp</h3>
-            <p className="text-xs text-on-surface-variant">{student.full_name}</p>
-          </div>
-          <button
-            type="button"
-            className="rounded-lg p-1.5 text-on-surface-variant hover:bg-surface-high"
-            onClick={onClose}
-          >
-            <XCircle className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="space-y-3 p-5">
-          {options.length === 0 ? (
-            <p className="text-sm text-on-surface-variant">
-              Không còn lớp khả dụng (chưa được gán lớp, lớp đã khóa, hoặc học viên đã có trong mọi
-              lớp của bạn).
-            </p>
-          ) : (
-            <>
-              <Field label="Lớp" required>
-                <SelectField
-                  required
-                  value={classId}
-                  placeholder="- Chọn lớp -"
-                  options={options.map((c) => ({
-                    value: String(c.id),
-                    label: classLabel(c),
-                  }))}
-                  onChange={setClassId}
-                />
-              </Field>
-              <Field label="Trạng thái">
-                <SelectField
-                  value={status}
-                  options={
-                    statuses.length
-                      ? statuses.map((s) => ({ value: s.code, label: s.name }))
-                      : [{ value: "active", label: "Đang học" }]
-                  }
-                  onChange={setStatus}
-                />
-              </Field>
-            </>
-          )}
-        </div>
-        <div className="flex justify-end gap-2 border-t border-surface-low px-5 py-4">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
-            Hủy
-          </button>
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={enrolling || options.length === 0}
-          >
-            Ghi danh
-          </button>
-        </div>
-      </form>
     </div>
   );
 }
@@ -722,18 +609,38 @@ function StudentFormModal({
 function StudentsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session } = useSession();
-  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
+  const { can, isAdmin } = usePermissions();
+  const canCreateStudents = can("students.create");
+  const canUpdateStudents = can("students.update");
+  const canDeleteStudents = can("students.delete");
   const [pending, startTransition] = useTransition();
-  const [items, setItems] = useState<LmsStudent[]>([]);
+  const now = new Date();
+
   const [classes, setClasses] = useState<LmsClass[]>([]);
+  const [items, setItems] = useState<LmsStudent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState(searchParams.get("q") || "");
-  const [classId, setClassId] = useState(searchParams.get("class_id") || "");
-  const [canManage, setCanManage] = useState(false);
+
+  const [listQ, setListQ] = useState(
+    searchParams.get("student_id") ? "" : searchParams.get("q") || "",
+  );
+  const [listClassId, setListClassId] = useState(
+    searchParams.get("student_id") ? "" : searchParams.get("class_id") || "",
+  );
+
+  const [studentId, setStudentId] = useState(searchParams.get("student_id") || "");
+  const [filterClassId, setFilterClassId] = useState(
+    searchParams.get("student_id") ? searchParams.get("class_id") || "" : "",
+  );
+  const [filterYear, setFilterYear] = useState(
+    Number(searchParams.get("year") || now.getFullYear()),
+  );
+  const [filterMonth, setFilterMonth] = useState(searchParams.get("month") || "");
+  const [overview, setOverview] = useState<StudentOverview | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [headerAutoOpened, setHeaderAutoOpened] = useState(false);
+
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<LmsStudent | null>(null);
-  const [enrollTarget, setEnrollTarget] = useState<LmsStudent | null>(null);
   const [form, setForm] = useState<StudentForm>(EMPTY_STUDENT_FORM);
   const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -746,53 +653,137 @@ function StudentsContent() {
   );
 
   const canEnroll = isAdmin || classes.some((c) => !c.is_locked);
-  const showActions = canManage || isAdmin || canEnroll;
   const modalOpen = showCreate || editing != null;
+  const detailMode = Boolean(studentId);
 
-  function loadStudents(nextQ = q, nextClassId = classId) {
-    const query = buildQuery({ q: nextQ, class_id: nextClassId });
-    router.replace(`/students${query}`);
+  function loadStudents(nextQ = listQ, nextClassId = listClassId) {
+    const query = buildQuery({ q: nextQ || undefined, class_id: nextClassId || undefined });
+    if (!detailMode) {
+      router.replace(`/students${query}`);
+    }
     setLoading(true);
-    lmsApi
+    return lmsApi
       .students(query)
       .then((res) => {
-        startTransition(() => {
-          const list: LmsStudent[] = res.data || [];
-          setItems(list);
-          setEditing((prev) => {
-            if (!prev) return prev;
-            return list.find((s: LmsStudent) => s.id === prev.id) || prev;
-          });
-          setEnrollTarget((prev) => {
-            if (!prev) return prev;
-            return list.find((s: LmsStudent) => s.id === prev.id) || prev;
-          });
-          setLoading(false);
-        });
+        const list: LmsStudent[] = res.data || [];
+        setItems(list);
+        return list;
       })
       .catch((e) => {
         toast.error(e.message);
-        setLoading(false);
-      });
+        return [] as LmsStudent[];
+      })
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => {
-    Promise.all([
-      lmsApi.classes("?limit=100"),
-      lmsApi.students(buildQuery({ q, class_id: classId })),
-      lmsApi.me(),
-    ])
-      .then(([classesRes, studentsRes, meRes]) => {
+    lmsApi
+      .classes("?limit=100")
+      .then((classesRes) => {
         setClasses(classesRes.data || []);
-        setItems(studentsRes.data || []);
-        const role = meRes.data?.user?.role;
-        const flags = meRes.data?.user?.catalog_permissions;
-        setCanManage(role === "admin" || !!flags?.manage_students);
       })
-      .catch((e) => toast.error(e.message))
-      .finally(() => setLoading(false));
+      .catch((e) => toast.error(e.message));
+  }, []);
+
+  useEffect(() => {
+    if (detailMode) return;
+    loadStudents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Header search: /students?q=... without student_id → list; auto-open if exactly 1 match
+  useEffect(() => {
+    if (detailMode || headerAutoOpened) return;
+    const initialQ = searchParams.get("q");
+    if (!initialQ?.trim()) return;
+    lmsApi
+      .students(buildQuery({ q: initialQ.trim(), limit: 20 }))
+      .then((res) => {
+        const list: LmsStudent[] = res.data || [];
+        setItems(list);
+        setLoading(false);
+        if (list.length === 1) {
+          setHeaderAutoOpened(true);
+          openDetail(list[0], { fromHeader: true });
+        }
+      })
+      .catch((e) => toast.error(e.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function syncDetailUrl(next: {
+    studentId?: string;
+    q?: string;
+    classId?: string;
+    year?: number;
+    month?: string;
+  }) {
+    const sid = next.studentId ?? studentId;
+    const query = buildQuery({
+      student_id: sid || undefined,
+      q: next.q,
+      class_id: (next.classId ?? filterClassId) || undefined,
+      year: next.year ?? filterYear,
+      month: (next.month ?? filterMonth) || undefined,
+    });
+    router.replace(`/students${query}`);
+  }
+
+  function loadOverview(
+    id = studentId,
+    classId = filterClassId,
+    year = filterYear,
+    month = filterMonth,
+  ) {
+    if (!id) {
+      setOverview(null);
+      return;
+    }
+    const query = buildQuery({
+      class_id: classId || undefined,
+      year,
+      month: month || undefined,
+    });
+    setLoadingDetail(true);
+    lmsApi
+      .studentDetail(id, query)
+      .then((res) => setOverview(res.data as StudentOverview))
+      .catch((e) => {
+        toast.error(e.message || "Không tải được hồ sơ học viên");
+        setOverview(null);
+      })
+      .finally(() => setLoadingDetail(false));
+  }
+
+  useEffect(() => {
+    if (studentId) loadOverview();
+    else setOverview(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentId, filterClassId, filterYear, filterMonth]);
+
+  function openDetail(s: LmsStudent, opts?: { fromHeader?: boolean }) {
+    const firstClass = s.enrollments?.[0]?.class_id;
+    const classId = firstClass ? String(firstClass) : "";
+    setStudentId(String(s.id));
+    setFilterClassId(classId);
+    syncDetailUrl({
+      studentId: String(s.id),
+      q: opts?.fromHeader ? s.full_name : s.full_name,
+      classId,
+    });
+  }
+
+  function backToList() {
+    setStudentId("");
+    setOverview(null);
+    setFilterClassId("");
+    const query = buildQuery({
+      q: listQ || undefined,
+      class_id: listClassId || undefined,
+    });
+    router.replace(`/students${query}`);
+    loadStudents();
+  }
 
   function resetAvatarState() {
     setPendingAvatar(null);
@@ -844,6 +835,9 @@ function StudentsContent() {
             await lmsApi.uploadStudentAvatar(editing.id, pendingAvatar);
           }
           toast.success("Đã cập nhật học viên");
+          closeModal();
+          if (studentId) loadOverview(String(editing.id));
+          else loadStudents();
         } else {
           const res = await lmsApi.createStudent(body);
           const created = res.data;
@@ -868,9 +862,9 @@ function StudentsContent() {
           } else {
             toast.success("Đã thêm học viên");
           }
+          closeModal();
+          loadStudents();
         }
-        closeModal();
-        loadStudents();
       } catch (err: unknown) {
         toast.error(err instanceof Error ? err.message : "Không lưu được học viên");
       }
@@ -884,42 +878,112 @@ function StudentsContent() {
         await lmsApi.deleteStudent(student.id);
         toast.success("Đã xóa học viên");
         if (editing?.id === student.id) closeModal();
-        loadStudents();
+        if (String(student.id) === studentId) backToList();
+        else loadStudents();
       } catch (err: unknown) {
         toast.error(err instanceof Error ? err.message : "Không xóa được học viên");
       }
     });
   }
 
+  if (detailMode) {
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <button type="button" className="btn btn-ghost shrink-0" onClick={backToList}>
+              <ArrowLeft className="h-4 w-4" />
+              Danh sách
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-primary-dark">Hồ sơ học viên</h1>
+              <p className="text-sm text-on-surface-variant">
+                Tổng quan điểm danh, tiến độ và đánh giá của học viên.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {loadingDetail && !overview ? (
+          <div className="card text-sm text-on-surface-variant">Đang tải hồ sơ…</div>
+        ) : overview ? (
+          <LookupOverview
+            data={overview}
+            classes={classes}
+            filterClassId={filterClassId}
+            filterYear={filterYear}
+            filterMonth={filterMonth}
+            canEdit={canUpdateStudents}
+            onFilterClass={(v) => {
+              setFilterClassId(v);
+              syncDetailUrl({ classId: v, q: overview.student.full_name });
+            }}
+            onFilterYear={(v) => {
+              setFilterYear(v);
+              syncDetailUrl({ year: v, q: overview.student.full_name });
+            }}
+            onFilterMonth={(v) => {
+              setFilterMonth(v);
+              syncDetailUrl({ month: v, q: overview.student.full_name });
+            }}
+            onEdit={() => openEdit(overview.student)}
+          />
+        ) : (
+          <div className="card text-sm text-on-surface-variant">Không tải được hồ sơ.</div>
+        )}
+
+        {modalOpen ? (
+          <StudentFormModal
+            editing={editing}
+            pending={pending}
+            form={form}
+            avatarPreview={avatarPreview}
+            classes={classes}
+            statuses={statuses}
+            canEnroll={canEnroll}
+            enrollClassId={createEnrollClassId}
+            onEnrollClassIdChange={setCreateEnrollClassId}
+            onChange={patchForm}
+            onAvatarPick={onAvatarPick}
+            onClose={closeModal}
+            onSubmit={saveStudent}
+            onEnrollmentChanged={() => loadOverview()}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-primary-dark">Học viên</h1>
+          <h1 className="text-2xl font-bold text-primary-dark">Tra cứu học viên</h1>
           <p className="text-sm text-on-surface-variant">
-            Hồ sơ master dùng chung nhiều lớp. Ghi danh vào lớp ngay tại đây (lớp theo quyền của bạn).
+            Danh sách học viên. Bấm Chi tiết để xem toàn bộ hồ sơ và quá trình học.
           </p>
         </div>
-        {canManage || isAdmin ? (
+        {canCreateStudents ? (
           <button type="button" className="btn btn-primary w-full sm:w-auto" onClick={openCreate}>
             <Plus className="h-4 w-4" />
             Thêm học viên
           </button>
         ) : null}
       </div>
+
       <div className="card flex flex-wrap gap-3">
         <SearchField
           className="w-full"
           wrapperClassName="w-full sm:max-w-xs"
           placeholder="Tìm tên..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
+          value={listQ}
+          onChange={(e) => setListQ(e.target.value)}
           type="text"
         />
         <select
           className="input w-full sm:max-w-xs"
-          value={classId}
-          onChange={(e) => setClassId(e.target.value)}
+          value={listClassId}
+          onChange={(e) => setListClassId(e.target.value)}
         >
           <option value="">Tất cả lớp</option>
           {classes.map((c) => (
@@ -928,10 +992,15 @@ function StudentsContent() {
             </option>
           ))}
         </select>
-        <button type="button" className="btn btn-primary w-full sm:w-auto" onClick={() => loadStudents()}>
+        <button
+          type="button"
+          className="btn btn-primary w-full sm:w-auto"
+          onClick={() => loadStudents()}
+        >
           Lọc
         </button>
       </div>
+
       <div className="card overflow-x-auto">
         {loading ? (
           <div className="space-y-2 py-2">
@@ -947,7 +1016,7 @@ function StudentsContent() {
                 <th>Tên EN</th>
                 <th>Lớp / trạng thái</th>
                 <th>SĐT</th>
-                {showActions ? <th className="text-right">Hành động</th> : null}
+                <th className="text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -955,9 +1024,13 @@ function StudentsContent() {
                 const thumb = avatarSrc(s.avatar);
                 const phoneDisplay = s.parent_phone || s.phone || "—";
                 return (
-                  <tr key={s.id} className="border-b border-border/70">
-                    <td className="py-2">
-                      <div className="flex items-center gap-2.5">
+                  <tr key={s.id} className="border-b border-border/60">
+                    <td className="py-2.5">
+                      <button
+                        type="button"
+                        className="flex items-center gap-2.5 text-left hover:text-primary-dark"
+                        onClick={() => openDetail(s)}
+                      >
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-low">
                           {thumb ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -967,7 +1040,7 @@ function StudentsContent() {
                           )}
                         </div>
                         <span className="font-medium">{s.full_name}</span>
-                      </div>
+                      </button>
                     </td>
                     <td className="text-slate-600">{s.english_name || "—"}</td>
                     <td className="text-xs text-slate-600">
@@ -976,42 +1049,43 @@ function StudentsContent() {
                         .join(", ") || "—"}
                     </td>
                     <td>{phoneDisplay}</td>
-                    {showActions ? (
-                      <td className="py-2 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {canEnroll ? (
+                    <td className="py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          title="Chi tiết"
+                          onClick={() => openDetail(s)}
+                        >
+                          <Eye className="h-4 w-4" />
+                          <span className="hidden sm:inline">Chi tiết</span>
+                        </button>
+                        {canUpdateStudents || canDeleteStudents ? (
+                          <>
+                            {canUpdateStudents ? (
                             <button
                               type="button"
                               className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
-                              title="Ghi danh vào lớp"
-                              onClick={() => setEnrollTarget(s)}
+                              title="Sửa"
+                              onClick={() => openEdit(s)}
                             >
-                              <BookOpen className="h-4 w-4" />
+                              <Pencil className="h-4 w-4" />
                             </button>
-                          ) : null}
-                          {canManage || isAdmin ? (
-                            <>
-                              <button
-                                type="button"
-                                className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
-                                title="Sửa"
-                                onClick={() => openEdit(s)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
-                                title="Xóa"
-                                onClick={() => removeStudent(s)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </>
-                          ) : null}
-                        </div>
-                      </td>
-                    ) : null}
+                            ) : null}
+                            {canDeleteStudents ? (
+                            <button
+                              type="button"
+                              className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
+                              title="Xóa"
+                              onClick={() => removeStudent(s)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                            ) : null}
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -1022,6 +1096,7 @@ function StudentsContent() {
           <p className="py-6 text-center text-sm text-slate-500">Không có học viên.</p>
         ) : null}
       </div>
+
       {modalOpen ? (
         <StudentFormModal
           editing={editing}
@@ -1037,16 +1112,7 @@ function StudentsContent() {
           onAvatarPick={onAvatarPick}
           onClose={closeModal}
           onSubmit={saveStudent}
-          onEnrollmentChanged={loadStudents}
-        />
-      ) : null}
-      {enrollTarget ? (
-        <EnrollDialog
-          student={enrollTarget}
-          classes={classes}
-          statuses={statuses}
-          onClose={() => setEnrollTarget(null)}
-          onEnrolled={loadStudents}
+          onEnrollmentChanged={() => loadStudents()}
         />
       ) : null}
     </div>
