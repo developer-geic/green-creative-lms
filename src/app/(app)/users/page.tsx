@@ -4,9 +4,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AvatarThumb } from "@/components/AvatarEditor";
+import { usePermissions } from "@/hooks/usePermissions";
 import { lmsApi } from "@/lib/api";
 
 export default function UsersPage() {
+  const { can } = usePermissions();
+  const canCreate = can("users.create");
+  const canUpdate = can("users.update");
   const [items, setItems] = useState<
     Array<{
       id: number;
@@ -69,6 +73,7 @@ export default function UsersPage() {
         </h1>
       </div>
 
+      {canCreate ? (
       <form onSubmit={create} className="card flex flex-wrap gap-3 !p-4">
         <input
           className="input w-full sm:max-w-xs"
@@ -94,8 +99,9 @@ export default function UsersPage() {
         </select>
         <button className="btn btn-primary w-full sm:w-auto">+ Tạo người dùng mới</button>
       </form>
+      ) : null}
 
-      {pending.length > 0 ? (
+      {pending.length > 0 && canUpdate ? (
         <div className="card">
           <h2 className="mb-3 text-lg font-bold">Chờ duyệt ({pending.length})</h2>
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -167,7 +173,7 @@ export default function UsersPage() {
                       href={`/users/${u.id}`}
                       className="text-xs font-semibold text-primary hover:underline"
                     >
-                      Chi tiết →
+                      Chi tiết
                     </Link>
                   </td>
                 </tr>

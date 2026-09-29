@@ -41,12 +41,18 @@ export function CatalogCrudPanel({
   loading,
   programs,
   onChanged,
+  canCreate = true,
+  canUpdate = true,
+  canDelete = true,
 }: {
   mode: Mode;
   items: LmsCatalogItem[];
   loading: boolean;
   programs?: LmsCatalogItem[];
   onChanged: () => void;
+  canCreate?: boolean;
+  canUpdate?: boolean;
+  canDelete?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
@@ -128,6 +134,7 @@ export function CatalogCrudPanel({
 
   return (
     <div className="space-y-4">
+      {canCreate || (editing && canUpdate) ? (
       <form onSubmit={submit} className="card grid gap-3 md:grid-cols-2">
         {editing ? (
           <div className="flex flex-col gap-1 md:col-span-2">
@@ -179,6 +186,7 @@ export function CatalogCrudPanel({
           )}
         </div>
       </form>
+      ) : null}
 
       <div className="card overflow-x-auto">
         {loading ? (
@@ -207,19 +215,27 @@ export function CatalogCrudPanel({
                     <td>{item.program?.name || "—"}</td>
                   )}
                   <td>
-                    <button
-                      type="button"
-                      className={`pill ${item.is_active ? "pill-good" : "pill-neutral"}`}
-                      onClick={() => toggleActive(item)}
-                    >
-                      {item.is_active ? "Active" : "Off"}
-                    </button>
+                    {canUpdate ? (
+                      <button
+                        type="button"
+                        className={`pill ${item.is_active ? "pill-good" : "pill-neutral"}`}
+                        onClick={() => toggleActive(item)}
+                      >
+                        {item.is_active ? "Active" : "Off"}
+                      </button>
+                    ) : (
+                      <span className={`pill ${item.is_active ? "pill-good" : "pill-neutral"}`}>
+                        {item.is_active ? "Active" : "Off"}
+                      </span>
+                    )}
                   </td>
                   <td className="space-x-2 text-right">
-                    <button type="button" className="btn btn-ghost !px-2 !py-1 text-xs" onClick={() => startEdit(item)}>
-                      Sửa
-                    </button>
-                    {!item.is_system && (
+                    {canUpdate ? (
+                      <button type="button" className="btn btn-ghost !px-2 !py-1 text-xs" onClick={() => startEdit(item)}>
+                        Sửa
+                      </button>
+                    ) : null}
+                    {canDelete && !item.is_system ? (
                       <button
                         type="button"
                         className="btn btn-danger !px-2 !py-1 text-xs"
@@ -227,7 +243,7 @@ export function CatalogCrudPanel({
                       >
                         Xóa
                       </button>
-                    )}
+                    ) : null}
                   </td>
                 </tr>
               ))}

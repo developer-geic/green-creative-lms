@@ -21,6 +21,7 @@ export const config = {
     "/users/:path*",
     "/import/:path*",
     "/catalogs/:path*",
+    "/rbac/:path*",
     "/forbidden",
   ],
 };

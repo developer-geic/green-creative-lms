@@ -155,7 +155,8 @@ export const lmsApi = {
     lmsFetch(`/lms/students/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteStudent: (id: number | string) =>
     lmsFetch(`/lms/students/${id}`, { method: "DELETE" }),
-  studentDetail: (id: number | string) => lmsFetch(`/lms/students/${id}`),
+  studentDetail: (id: number | string, query = "") =>
+    lmsFetch(`/lms/students/${id}${query}`),
   classEnrollments: (classId: number | string) =>
     lmsFetch(`/lms/classes/${classId}/enrollments`),
   createEnrollment: (classId: number | string, body: unknown) =>
@@ -212,6 +213,30 @@ export const lmsApi = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+  updateUser: (id: number | string, body: unknown) =>
+    lmsFetch(`/lms/users/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  rbacPermissions: () => lmsFetch("/lms/rbac/permissions"),
+  createRbacPermission: (body: unknown) =>
+    lmsFetch("/lms/rbac/permissions", { method: "POST", body: JSON.stringify(body) }),
+  updateRbacPermission: (id: number | string, body: unknown) =>
+    lmsFetch(`/lms/rbac/permissions/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteRbacPermission: (id: number | string) =>
+    lmsFetch(`/lms/rbac/permissions/${id}`, { method: "DELETE" }),
+  rbacRoles: () => lmsFetch("/lms/rbac/roles"),
+  rbacRoleOptions: () => lmsFetch("/lms/rbac/roles-options"),
+  createRbacRole: (body: unknown) =>
+    lmsFetch("/lms/rbac/roles", { method: "POST", body: JSON.stringify(body) }),
+  updateRbacRole: (id: number | string, body: unknown) =>
+    lmsFetch(`/lms/rbac/roles/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteRbacRole: (id: number | string) =>
+    lmsFetch(`/lms/rbac/roles/${id}`, { method: "DELETE" }),
+  rbacMenus: () => lmsFetch("/lms/rbac/menus"),
+  createRbacMenu: (body: unknown) =>
+    lmsFetch("/lms/rbac/menus", { method: "POST", body: JSON.stringify(body) }),
+  updateRbacMenu: (id: number | string, body: unknown) =>
+    lmsFetch(`/lms/rbac/menus/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteRbacMenu: (id: number | string) =>
+    lmsFetch(`/lms/rbac/menus/${id}`, { method: "DELETE" }),
   attendance: (classId: number | string, query = "") =>
     lmsFetch(`/lms/classes/${classId}/attendance${query}`),
   upsertAttendance: (sessionId: number | string, records: unknown[]) =>
@@ -229,6 +254,8 @@ export const lmsApi = {
   assessments: (query = "") => lmsFetch(`/lms/assessments${query}`),
   saveAssessment: (body: unknown) =>
     lmsFetch("/lms/assessments", { method: "POST", body: JSON.stringify(body) }),
+  deleteAssessment: (id: number | string) =>
+    lmsFetch(`/lms/assessments/${id}`, { method: "DELETE" }),
   announcements: (query = "") => lmsFetch(`/lms/announcements${query}`),
   unreadCount: () => lmsFetch("/lms/announcements/unread-count"),
   createAnnouncement: (body: unknown) =>

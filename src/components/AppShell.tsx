@@ -20,33 +20,49 @@ import {
   Users,
   UserCircle,
   X,
+  type LucideIcon,
 } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
-import { canAccessCatalogs } from "@/components/catalogs/catalogTabs";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { SearchField } from "@/components/SearchField";
+import { invalidateMeCache } from "@/hooks/usePermissions";
 import { cn } from "@/lib/utils";
 import { lmsApi } from "@/lib/api";
-import type { CatalogPermissions } from "@/types/lms";
+import type { LmsMenuItem } from "@/types/lms";
 
-const TEACHER_NAV_BASE = [
-  { href: "/dashboard", label: "Tổng quan", icon: LayoutDashboard },
-  { href: "/attendance", label: "Điểm danh", icon: CalendarCheck },
-  { href: "/progress", label: "Tiến độ & Đánh giá", icon: ClipboardList },
-  { href: "/students", label: "Học viên & Tra cứu", icon: GraduationCap },
-] as const;
+const ICON_MAP: Record<string, LucideIcon> = {
+  LayoutDashboard,
+  CalendarCheck,
+  ClipboardList,
+  GraduationCap,
+  BookOpen,
+  Library,
+  ShieldCheck,
+  Users,
+  ChartColumn,
+  Upload,
+  Bell,
+  UserCircle,
+};
 
-const CLASSES_NAV = { href: "/classes", label: "Lớp học", icon: BookOpen } as const;
+const FALLBACK_SIDEBAR: LmsMenuItem[] = [
+  { id: 1, label: "Tổng quan", href: "/dashboard", icon: "LayoutDashboard", placement: "sidebar", sort_order: 10 },
+  { id: 2, label: "Điểm danh", href: "/attendance", icon: "CalendarCheck", placement: "sidebar", sort_order: 20 },
+  {
+    id: 3,
+    label: "Tiến độ & Đánh giá",
+    href: "/progress",
+    icon: "ClipboardList",
+    placement: "sidebar",
+    sort_order: 30,
+    also_active_for: ["/assessments"],
+  },
+  { id: 4, label: "Tra cứu học viên", href: "/students", icon: "GraduationCap", placement: "sidebar", sort_order: 40 },
+];
 
-const ADMIN_NAV = [
-  { href: "/users", label: "Quản trị Người dùng", icon: Users },
-  { href: "/stats", label: "Thống kê & Báo cáo", icon: ChartColumn },
-  { href: "/import", label: "Import Excel", icon: Upload },
-] as const;
-
-const BOTTOM_NAV = [
-  { href: "/announcements", label: "Thông báo", icon: Bell },
-  { href: "/profile", label: "Cài đặt & Hồ sơ", icon: UserCircle },
-] as const;
+const FALLBACK_BOTTOM: LmsMenuItem[] = [
+  { id: 10, label: "Thông báo", href: "/announcements", icon: "Bell", placement: "bottom", sort_order: 10 },
+  { id: 11, label: "Cài đặt & Hồ sơ", href: "/profile", icon: "UserCircle", placement: "bottom", sort_order: 20 },
+];
 
 function NavItem({
   href,
@@ -54,14 +70,21 @@ function NavItem({
   icon: Icon,
   pathname,
   badge,
+  alsoActiveFor,
 }: {
   href: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   pathname: string;
   badge?: number;
+  alsoActiveFor?: readonly string[];
 }) {
-  const active = pathname === href || pathname.startsWith(href + "/");
+  const active =
+    pathname === href ||
+    pathname.startsWith(href + "/") ||
+    (alsoActiveFor || []).some(
+      (p) => pathname === p || pathname.startsWith(p + "/"),
+    );
   return (
     <Link href={href} className={cn("nav-link", active && "nav-link-active")}>
       <Icon className="h-5 w-5 shrink-0" />
@@ -85,7 +108,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     (session?.user as { email?: string } | undefined)?.email ||
     "Người dùng";
   const [unread, setUnread] = useState(0);
-  const [catalogPerms, setCatalogPerms] = useState<CatalogPermissions | null>(null);
+  const [menus, setMenus] = useState<LmsMenuItem[]>([]);
+  const [roleLabel, setRoleLabel] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -97,7 +121,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ]).then(([unreadRes, meRes]) => {
       startTransition(() => {
         setUnread(unreadRes.data?.count || 0);
-        setCatalogPerms(meRes?.data?.user?.catalog_permissions || null);
+        const list = (meRes?.data?.menus as LmsMenuItem[]) || [];
+        setMenus(list);
+        setRoleLabel(meRes?.data?.user?.role_detail?.name || null);
       });
     });
   }, [pathname]);
@@ -115,17 +141,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileNavOpen]);
 
-  const showCatalogs = canAccessCatalogs(isAdmin, catalogPerms);
-  const showClasses = isAdmin || !!catalogPerms?.manage_classes;
-  const teacherNav = showClasses
-    ? [
-        TEACHER_NAV_BASE[0],
-        CLASSES_NAV,
-        TEACHER_NAV_BASE[1],
-        TEACHER_NAV_BASE[2],
-        TEACHER_NAV_BASE[3],
-      ]
-    : [...TEACHER_NAV_BASE];
+  const { sidebar, bottom } = useMemo(() => {
+    const source = menus.length ? menus : [...FALLBACK_SIDEBAR, ...FALLBACK_BOTTOM];
+    return {
+      sidebar: source
+        .filter((m) => m.placement !== "bottom")
+        .sort((a, b) => a.sort_order - b.sort_order),
+      bottom: source
+        .filter((m) => m.placement === "bottom")
+        .sort((a, b) => a.sort_order - b.sort_order),
+    };
+  }, [menus]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -155,7 +181,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 className="h-9 w-9 shrink-0 rounded-lg object-contain"
               />
               <div className="flex flex-col">
-                <span className="text-base font-semibold leading-tight text-primary">Sáng Tạo Xanh</span>
+                <span className="text-base font-semibold leading-tight text-primary">
+                  Sáng Tạo Xanh
+                </span>
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">
                   Enterprise LMS
                 </span>
@@ -176,7 +204,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-1.5 px-1.5">
                 <ShieldCheck className="h-4 w-4 text-primary" />
                 <span className="text-[11px] font-semibold text-foreground">
-                  {isAdmin ? "Admin / Giáo viên" : "Giáo viên"}
+                  {isAdmin ? "Admin" : roleLabel || "Giáo viên"}
                 </span>
               </div>
               <span className="rounded p-1 text-on-surface-variant" title="Vai trò hiện tại">
@@ -186,26 +214,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="flex max-h-[calc(100vh-140px)] flex-col gap-1 overflow-y-auto px-4 py-2">
-            {teacherNav.map((item) => (
-              <NavItem key={item.href} {...item} pathname={pathname} />
-            ))}
-            {showCatalogs || isAdmin ? <div className="mx-2 my-1 h-px bg-surface-high" /> : null}
-            {showCatalogs ? (
-              <NavItem href="/catalogs" label="Danh mục" icon={Library} pathname={pathname} />
-            ) : null}
-            {isAdmin
-              ? ADMIN_NAV.map((item) => (
-                  <NavItem key={item.href} {...item} pathname={pathname} />
-                ))
-              : null}
-            {BOTTOM_NAV.map((item) => (
-              <NavItem
-                key={item.href}
-                {...item}
-                pathname={pathname}
-                badge={item.href === "/announcements" ? unread : undefined}
-              />
-            ))}
+            {sidebar.map((item) => {
+              const Icon = ICON_MAP[item.icon || ""] || LayoutDashboard;
+              return (
+                <NavItem
+                  key={`${item.id}-${item.href}`}
+                  href={item.href}
+                  label={item.label}
+                  icon={Icon}
+                  pathname={pathname}
+                  alsoActiveFor={item.also_active_for}
+                />
+              );
+            })}
+            {bottom.length ? <div className="mx-2 my-1 h-px bg-surface-high" /> : null}
+            {bottom.map((item) => {
+              const Icon = ICON_MAP[item.icon || ""] || Bell;
+              return (
+                <NavItem
+                  key={`${item.id}-${item.href}`}
+                  href={item.href}
+                  label={item.label}
+                  icon={Icon}
+                  pathname={pathname}
+                  badge={item.href === "/announcements" ? unread : undefined}
+                  alsoActiveFor={item.also_active_for}
+                />
+              );
+            })}
           </nav>
         </div>
 
@@ -218,7 +254,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="flex min-w-0 flex-col">
                 <span className="truncate text-xs font-semibold text-foreground">{userName}</span>
                 <span className="text-[11px] text-on-surface-variant">
-                  {isAdmin ? "Ban Đào Tạo" : "Giảng viên"}
+                  {isAdmin ? "Ban Đào Tạo" : roleLabel || "Giảng viên"}
                 </span>
               </div>
             </div>
@@ -226,7 +262,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               type="button"
               className="rounded p-1 text-on-surface-variant transition-colors hover:text-foreground"
               title="Đăng xuất"
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => {
+                invalidateMeCache();
+                signOut({ callbackUrl: "/login" });
+              }}
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -256,7 +295,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (search.trim()) {
-                  window.location.href = `/reports?q=${encodeURIComponent(search.trim())}`;
+                  window.location.href = `/students?q=${encodeURIComponent(search.trim())}`;
                 }
               }}
             >
@@ -273,7 +312,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="hidden items-center gap-1.5 rounded-full bg-surface-high px-3 py-1 sm:flex">
               <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
               <span className="text-[11px] font-semibold text-foreground">
-                {isAdmin ? "Admin / Giảng viên" : "Giảng viên"}
+                {isAdmin ? "Admin / Giảng viên" : roleLabel || "Giảng viên"}
               </span>
             </div>
             <Link
@@ -290,7 +329,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="hidden flex-col text-right lg:flex">
                 <span className="text-xs font-semibold text-foreground">{userName}</span>
                 <span className="text-[11px] font-medium text-primary">
-                  {isAdmin ? "Giáo viên / Quản trị viên" : "Giáo viên"}
+                  {isAdmin ? "Giáo viên / Quản trị viên" : roleLabel || "Giáo viên"}
                 </span>
               </div>
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-container text-xs font-bold text-on-primary">

@@ -23,9 +23,10 @@ import { SearchField } from "@/components/SearchField";
 import { SelectField } from "@/components/SelectField";
 import { TimeRangeField } from "@/components/TimeRangeField";
 import { useCatalog } from "@/hooks/useCatalog";
+import { usePermissions } from "@/hooks/usePermissions";
 import { lmsApi } from "@/lib/api";
 import { buildQuery, cn } from "@/lib/utils";
-import type { CatalogPermissions, LmsClass, LmsUser } from "@/types/lms";
+import type { LmsClass, LmsUser } from "@/types/lms";
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Đang hoạt động",
@@ -38,6 +39,23 @@ const STATUS_OPTIONS = [
   { value: "inactive", label: STATUS_LABELS.inactive },
   { value: "ended", label: STATUS_LABELS.ended },
 ];
+
+function formatClassDate(value?: string | null): string {
+  if (!value) return "";
+  const raw = String(value).slice(0, 10);
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return raw;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+function formatClassDateRange(start?: string | null, end?: string | null): string {
+  const a = formatClassDate(start);
+  const b = formatClassDate(end);
+  if (a && b) return `${a} – ${b}`;
+  if (a) return `Từ ${a}`;
+  if (b) return `Đến ${b}`;
+  return "";
+}
 
 type PendingAction =
   | { type: "status"; id: number; code: string; status: string }
@@ -62,11 +80,15 @@ function ClassesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session, status: sessionStatus } = useSession();
-  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
+  const { can, ready: permsReady, isAdmin } = usePermissions();
   const [, startTransition] = useTransition();
 
+  const canViewClasses = can("classes.view");
+  const canCreateClasses = can("classes.create");
+  const canUpdateClasses = can("classes.update");
+  const canDeleteClasses = can("classes.delete");
+
   const [accessChecked, setAccessChecked] = useState(false);
-  const [canManageClasses, setCanManageClasses] = useState(false);
   const [teacherOptions, setTeacherOptions] = useState<LmsUser[]>([]);
   const [items, setItems] = useState<LmsClass[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,6 +114,8 @@ function ClassesContent() {
     teacher_ids: [] as number[],
     min_class_size: "5",
     max_class_size: "15",
+    start_date: "",
+    end_date: "",
   });
 
   const modalOpen = showCreate || editing != null;
@@ -105,6 +129,8 @@ function ClassesContent() {
     teacher_ids: [] as number[],
     min_class_size: "5",
     max_class_size: "15",
+    start_date: "",
+    end_date: "",
   };
 
   const { items: programs } = useCatalog("programs");
@@ -135,36 +161,30 @@ function ClassesContent() {
   }, [items]);
 
   useEffect(() => {
-    if (sessionStatus === "loading") return;
-    lmsApi
-      .me()
-      .then(async (res) => {
-        const role = res.data?.user?.role || (session?.user as { role?: string } | undefined)?.role;
-        const flags = (res.data?.user?.catalog_permissions ||
-          null) as CatalogPermissions | null;
-        const admin = role === "admin";
-        const allowed = admin || !!flags?.manage_classes;
-        if (!allowed) {
-          toast.error("Bạn không có quyền quản lý lớp học");
-          router.replace("/");
-          return;
-        }
-        setCanManageClasses(true);
-        setAccessChecked(true);
-        if (admin) {
-          try {
-            const usersRes = await lmsApi.users("?role=teacher&status=approved&limit=100");
-            setTeacherOptions(Array.isArray(usersRes.data) ? usersRes.data : []);
-          } catch {
-            setTeacherOptions([]);
-          }
-        }
-      })
-      .catch((e) => {
-        toast.error(e.message || "Không kiểm tra được quyền");
-        router.replace("/");
-      });
-  }, [sessionStatus, router, session?.user]);
+    if (sessionStatus === "loading" || !permsReady) return;
+    if (!canViewClasses) {
+      toast.error("Bạn không có quyền xem lớp học");
+      router.replace("/");
+      return;
+    }
+    setAccessChecked(true);
+    if (canCreateClasses || canUpdateClasses || isAdmin) {
+      lmsApi
+        .users("?role=teacher&status=approved&limit=100")
+        .then((usersRes) => {
+          setTeacherOptions(Array.isArray(usersRes.data) ? usersRes.data : []);
+        })
+        .catch(() => setTeacherOptions([]));
+    }
+  }, [
+    sessionStatus,
+    permsReady,
+    canViewClasses,
+    canCreateClasses,
+    canUpdateClasses,
+    isAdmin,
+    router,
+  ]);
 
   function load() {
     const query = buildQuery({
@@ -228,14 +248,14 @@ function ClassesContent() {
   }
 
   function openCreate() {
-    if (!isAdmin) return;
+    if (!canCreateClasses) return;
     setEditing(null);
     setForm(emptyForm);
     setShowCreate(true);
   }
 
   function openEdit(c: LmsClass) {
-    if (c.is_locked || !canManageClasses) return;
+    if (c.is_locked || !canUpdateClasses) return;
     setShowCreate(false);
     setEditing(c);
     setForm({
@@ -248,6 +268,8 @@ function ClassesContent() {
       teacher_ids: (c.teachers || []).map((t) => t.lms_user_id),
       min_class_size: String(c.min_class_size ?? 5),
       max_class_size: String(c.max_class_size ?? 15),
+      start_date: c.start_date ? String(c.start_date).slice(0, 10) : "",
+      end_date: c.end_date ? String(c.end_date).slice(0, 10) : "",
     });
   }
 
@@ -270,6 +292,8 @@ function ClassesContent() {
       days: form.days,
       min_class_size: form.min_class_size ? Number(form.min_class_size) : 5,
       max_class_size: form.max_class_size ? Number(form.max_class_size) : 15,
+      start_date: form.start_date || null,
+      end_date: form.end_date || null,
     };
     if (isAdmin) {
       body.teachers = form.teacher_ids.map((lms_user_id) => ({
@@ -278,6 +302,10 @@ function ClassesContent() {
       }));
     }
     return body;
+  }
+
+  function datesInvalid(): boolean {
+    return !!(form.start_date && form.end_date && form.end_date < form.start_date);
   }
 
   async function createClassNow() {
@@ -294,6 +322,10 @@ function ClassesContent() {
     }
     if (max < min) {
       toast.error("Sĩ số tối đa phải ≥ sĩ số tối thiểu");
+      return;
+    }
+    if (datesInvalid()) {
+      toast.error("Ngày kết thúc phải sau hoặc bằng ngày khai giảng");
       return;
     }
     try {
@@ -321,6 +353,10 @@ function ClassesContent() {
       }
       if (max < min) {
         toast.error("Sĩ số tối đa phải ≥ sĩ số tối thiểu");
+        return;
+      }
+      if (datesInvalid()) {
+        toast.error("Ngày kết thúc phải sau hoặc bằng ngày khai giảng");
         return;
       }
       setPendingAction({ type: "update" });
@@ -395,7 +431,7 @@ function ClassesContent() {
     }
   }
 
-  if (!accessChecked || !canManageClasses) {
+  if (!accessChecked || !canViewClasses) {
     return (
       <div className="flex w-full flex-col gap-6">
         <div className="h-10 w-72 animate-pulse rounded-lg bg-surface-low" />
@@ -423,7 +459,7 @@ function ClassesContent() {
             <Download className="h-4 w-4" />
             Xuất Excel
           </button>
-          {isAdmin ? (
+          {canCreateClasses ? (
             <button
               type="button"
               className="btn btn-primary w-full sm:w-auto"
@@ -561,6 +597,7 @@ function ClassesContent() {
               {items.map((c) => {
                 const max = c.max_class_size || 15;
                 const pct = max > 0 ? Math.round(((c.active_student_count || 0) / max) * 100) : 0;
+                const dateRange = formatClassDateRange(c.start_date, c.end_date);
                 return (
                   <tr
                     key={c.id}
@@ -585,6 +622,9 @@ function ClassesContent() {
                       <div className="flex flex-col">
                         <span className="font-medium">{c.schedule || "—"}</span>
                         <span className="text-[11px] text-on-surface-variant">{c.time || ""}</span>
+                        {dateRange ? (
+                          <span className="text-[11px] text-on-surface-variant">{dateRange}</span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-4 py-3.5">
@@ -634,7 +674,7 @@ function ClassesContent() {
                         >
                           <Eye className="h-4 w-4" />
                         </Link>
-                        {!c.is_locked && canManageClasses ? (
+                        {!c.is_locked && canUpdateClasses ? (
                           <button
                             type="button"
                             className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
@@ -644,7 +684,7 @@ function ClassesContent() {
                             <Pencil className="h-4 w-4" />
                           </button>
                         ) : null}
-                        {!c.is_locked && canManageClasses ? (
+                        {!c.is_locked && canUpdateClasses ? (
                           <button
                             type="button"
                             className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
@@ -654,7 +694,7 @@ function ClassesContent() {
                             <XCircle className="h-4 w-4" />
                           </button>
                         ) : null}
-                        {isAdmin && !c.is_locked ? (
+                        {canDeleteClasses && !c.is_locked ? (
                           <button
                             type="button"
                             className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
@@ -859,7 +899,7 @@ function ClassesContent() {
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-foreground">Khung giờ học</label>
                   <TimeRangeField
@@ -874,6 +914,27 @@ function ClassesContent() {
                     placeholder="T3 - T5 - T7"
                     value={form.schedule}
                     onChange={(e) => setForm({ ...form, schedule: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-foreground">Ngày khai giảng</label>
+                  <input
+                    className="input"
+                    type="date"
+                    value={form.start_date}
+                    onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-foreground">Ngày kết thúc</label>
+                  <input
+                    className="input"
+                    type="date"
+                    value={form.end_date}
+                    min={form.start_date || undefined}
+                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
                   />
                 </div>
               </div>

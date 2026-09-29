@@ -6,11 +6,12 @@ import { useEffect, useState, useTransition } from "react";
 import { ArrowLeft, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { AvatarEditor, pickAvatarPath } from "@/components/AvatarEditor";
-import { CatalogPermissionEditor } from "@/components/catalogs/CatalogPermissionEditor";
 import { ErrorStatusView } from "@/components/ErrorStatusView";
+import { SelectField } from "@/components/SelectField";
+import { invalidateMeCache } from "@/hooks/usePermissions";
 import { lmsApi } from "@/lib/api";
 import type {
-  CatalogPermissions,
+  LmsRbacRole,
   TeacherProfile,
   UserDetailPayload,
 } from "@/types/lms";
@@ -78,6 +79,8 @@ export default function UserDetailPage() {
   const [avatarOverride, setAvatarOverride] = useState<string | null>(null);
   const [avatarSaving, startAvatarSave] = useTransition();
   const [reviewingId, setReviewingId] = useState<number | null>(null);
+  const [roles, setRoles] = useState<LmsRbacRole[]>([]);
+  const [savingRole, setSavingRole] = useState(false);
 
   function load() {
     setMissing(false);
@@ -99,6 +102,10 @@ export default function UserDetailPage() {
   useEffect(() => {
     setData(null);
     load();
+    lmsApi
+      .rbacRoleOptions()
+      .then((res) => setRoles(res.data || []))
+      .catch(() => setRoles([]));
   }, [id]);
 
   async function review(requestId: number, action: "approve" | "reject") {
@@ -251,21 +258,53 @@ export default function UserDetailPage() {
       </div>
 
       {isTeacher ? (
-        <CatalogPermissionEditor
-          userId={id}
-          initial={data.catalog_permissions || user?.catalog_permissions}
-          onSaved={(flags: CatalogPermissions) =>
-            setData((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    catalog_permissions: flags,
-                    user: { ...prev.user, catalog_permissions: flags },
-                  }
-                : prev,
-            )
-          }
-        />
+        <div className="overflow-hidden rounded-xl bg-surface shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+          <div className="border-b border-surface-low px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+              <h2 className="text-lg font-semibold text-foreground">Vai trò LMS</h2>
+            </div>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              Quyền menu và quản lý danh mục lấy theo vai trò — chỉnh tại Quyền &amp; Vai trò.
+            </p>
+          </div>
+          <div className="space-y-3 p-4">
+            <SelectField
+              aria-label="Vai trò"
+              value={user?.lms_role_id ? String(user.lms_role_id) : ""}
+              options={[
+                { value: "", label: "— Chưa gán —" },
+                ...roles.map((r) => ({
+                  value: String(r.id),
+                  label: `${r.name} (${r.code})`,
+                })),
+              ]}
+              onChange={async (v) => {
+                setSavingRole(true);
+                try {
+                  await lmsApi.updateUser(id, {
+                    lms_role_id: v ? Number(v) : null,
+                  });
+                  toast.success("Đã cập nhật vai trò");
+                  invalidateMeCache();
+                  load();
+                } catch (e: unknown) {
+                  toast.error(e instanceof Error ? e.message : "Không lưu được vai trò");
+                } finally {
+                  setSavingRole(false);
+                }
+              }}
+            />
+            {savingRole ? (
+              <p className="text-xs text-on-surface-variant">Đang lưu…</p>
+            ) : null}
+            {user?.role_detail ? (
+              <p className="text-sm text-on-surface-variant">
+                Hiện tại: <b className="text-foreground">{user.role_detail.name}</b>
+              </p>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       <div className="overflow-hidden rounded-xl bg-surface shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
