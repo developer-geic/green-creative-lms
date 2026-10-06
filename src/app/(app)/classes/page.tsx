@@ -310,6 +310,10 @@ function ClassesContent() {
 
   async function createClassNow() {
     if (!isAdmin) return;
+    if (!form.course_id) {
+      toast.error("Chọn khóa học");
+      return;
+    }
     if (!form.teacher_ids.length) {
       toast.error("Chọn ít nhất một giáo viên phụ trách lớp");
       return;
@@ -334,12 +338,20 @@ function ClassesContent() {
       closeModal();
       load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Lỗi tạo lớp");
+      const msg =
+        typeof err === "object" && err && "message" in err && typeof (err as { message: unknown }).message === "string"
+          ? (err as { message: string }).message
+          : "Lỗi tạo lớp";
+      toast.error(msg);
     }
   }
 
   function saveClass(e: FormEvent) {
     e.preventDefault();
+    if (!form.course_id) {
+      toast.error("Chọn khóa học");
+      return;
+    }
     if (editing) {
       if (isAdmin && !form.teacher_ids.length) {
         toast.error("Chọn ít nhất một giáo viên phụ trách lớp");
@@ -425,7 +437,11 @@ function ClassesContent() {
       setPendingAction(null);
       load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Thao tác thất bại");
+      const msg =
+        typeof err === "object" && err && "message" in err && typeof (err as { message: unknown }).message === "string"
+          ? (err as { message: string }).message
+          : "Thao tác thất bại";
+      toast.error(msg);
     } finally {
       setActionPending(false);
     }
@@ -744,6 +760,7 @@ function ClassesContent() {
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#213145]/40 p-4 backdrop-blur-sm">
           <form
+            noValidate
             onSubmit={saveClass}
             className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
           >
@@ -825,7 +842,11 @@ function ClassesContent() {
                     ]}
                     onChange={(course_id) => setForm({ ...form, course_id })}
                   />
-                  {!editing ? (
+                  {filteredCourses.length === 0 ? (
+                    <p className="text-[11px] text-amber-700">
+                      Hãy thêm khóa học trong cùng chương trình nhé.
+                    </p>
+                  ) : !editing ? (
                     <p className="text-[11px] text-on-surface-variant">
                       Mã lớp sẽ được tạo tự động từ tên khóa học.
                     </p>

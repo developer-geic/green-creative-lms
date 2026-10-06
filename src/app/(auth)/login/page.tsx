@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { lmsApi } from "@/lib/api";
 
@@ -46,17 +47,23 @@ export default function LoginPage() {
   async function doLogin(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const res = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-    setLoading(false);
-    if (res?.error) {
-      toast.error(res.error);
-      return;
+    try {
+      const res = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+      if (res?.error) {
+        toast.error(res.error);
+        setLoading(false);
+        return;
+      }
+      router.replace("/dashboard");
+      // Keep loading until navigation completes
+    } catch (err: any) {
+      toast.error(err?.message || "Đăng nhập thất bại");
+      setLoading(false);
     }
-    router.replace("/dashboard");
   }
 
   async function doSetPassword(e: FormEvent) {
@@ -78,7 +85,6 @@ export default function LoginPage() {
       router.replace("/dashboard");
     } catch (err: any) {
       toast.error(err.message || "Không đặt được mật khẩu");
-    } finally {
       setLoading(false);
     }
   }
@@ -95,6 +101,21 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function SubmitButton({ idle, busy }: { idle: string; busy: string }) {
+    return (
+      <button className="btn btn-primary w-full" disabled={loading}>
+        {loading ? (
+          <span className="inline-flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {busy}
+          </span>
+        ) : (
+          idle
+        )}
+      </button>
+    );
   }
 
   return (
@@ -116,36 +137,96 @@ export default function LoginPage() {
         {step === "email" && (
           <form onSubmit={continueEmail} className="space-y-3">
             <label className="block text-xs font-semibold text-on-surface-variant">Email</label>
-            <input className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-            <button className="btn btn-primary w-full" disabled={loading}>Tiếp tục</button>
+            <input
+              className="input"
+              type="email"
+              required
+              disabled={loading}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <SubmitButton idle="Tiếp tục" busy="Đang kiểm tra..." />
           </form>
         )}
 
         {step === "password" && (
           <form onSubmit={doLogin} className="space-y-3">
             <p className="text-sm text-on-surface-variant">{email}</p>
-            <input className="input" type="password" required placeholder="Mật khẩu" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <button className="btn btn-primary w-full" disabled={loading}>Đăng nhập</button>
-            <button type="button" className="btn btn-ghost w-full" onClick={() => setStep("email")}>Email khác</button>
+            <input
+              className="input"
+              type="password"
+              required
+              disabled={loading}
+              placeholder="Mật khẩu"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <SubmitButton idle="Đăng nhập" busy="Đang đăng nhập..." />
+            <button
+              type="button"
+              className="btn btn-ghost w-full"
+              disabled={loading}
+              onClick={() => setStep("email")}
+            >
+              Email khác
+            </button>
           </form>
         )}
 
         {step === "set-password" && (
           <form onSubmit={doSetPassword} className="space-y-3">
             <p className="text-sm text-on-surface-variant">Thiết lập mật khẩu lần đầu cho {email}</p>
-            <input className="input" placeholder="Tên hiển thị" value={name} onChange={(e) => setName(e.target.value)} />
-            <input className="input" type="password" required minLength={4} placeholder="Mật khẩu mới" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <input className="input" type="password" required minLength={4} placeholder="Nhập lại mật khẩu" value={password2} onChange={(e) => setPassword2(e.target.value)} />
-            <button className="btn btn-primary w-full" disabled={loading}>Tạo mật khẩu & đăng nhập</button>
+            <input
+              className="input"
+              disabled={loading}
+              placeholder="Tên hiển thị"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <input
+              className="input"
+              type="password"
+              required
+              minLength={4}
+              disabled={loading}
+              placeholder="Mật khẩu mới"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <input
+              className="input"
+              type="password"
+              required
+              minLength={4}
+              disabled={loading}
+              placeholder="Nhập lại mật khẩu"
+              value={password2}
+              onChange={(e) => setPassword2(e.target.value)}
+            />
+            <SubmitButton idle="Tạo mật khẩu & đăng nhập" busy="Đang tạo mật khẩu..." />
           </form>
         )}
 
         {step === "request" && (
           <form onSubmit={doRequest} className="space-y-3">
             <p className="text-sm text-on-surface-variant">{email} chưa có trong hệ thống. Gửi yêu cầu để admin duyệt.</p>
-            <input className="input" required placeholder="Họ tên" value={name} onChange={(e) => setName(e.target.value)} />
-            <button className="btn btn-primary w-full" disabled={loading}>Gửi yêu cầu</button>
-            <button type="button" className="btn btn-ghost w-full" onClick={() => setStep("email")}>Email khác</button>
+            <input
+              className="input"
+              required
+              disabled={loading}
+              placeholder="Họ tên"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <SubmitButton idle="Gửi yêu cầu" busy="Đang gửi..." />
+            <button
+              type="button"
+              className="btn btn-ghost w-full"
+              disabled={loading}
+              onClick={() => setStep("email")}
+            >
+              Email khác
+            </button>
           </form>
         )}
 

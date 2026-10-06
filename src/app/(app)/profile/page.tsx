@@ -69,7 +69,10 @@ function profileToForm(profile: Record<string, unknown> | null | undefined): Pro
 
 export default function ProfilePage() {
   const { data: session, update: updateSession } = useSession();
-  const [tab, setTab] = useState<TabId>("pedagogy");
+  const sessionRole =
+    (session?.user as { role?: string } | undefined)?.role ||
+    (session as { user?: { role?: string } } | null)?.user?.role;
+  const [tab, setTab] = useState<TabId>(sessionRole === "admin" ? "security" : "pedagogy");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<LmsUser | null>(null);
   const [directEditAvailable, setDirectEditAvailable] = useState(true);
@@ -85,33 +88,52 @@ export default function ProfilePage() {
   const [saving, startSave] = useTransition();
   const [pwSaving, startPwSave] = useTransition();
   const [avatarSaving, startAvatarSave] = useTransition();
+  const isAdmin = user?.role === "admin" || sessionRole === "admin";
 
   function load() {
     setLoading(true);
-    Promise.all([lmsApi.me(), lmsApi.teacherProfile()])
-      .then(([meRes, profileRes]) => {
+    Promise.allSettled([lmsApi.me(), lmsApi.teacherProfile()])
+      .then(([meSettled, profileSettled]) => {
+        if (meSettled.status !== "fulfilled") {
+          toast.error(
+            (meSettled.reason as { message?: string })?.message || "Không tải được hồ sơ",
+          );
+          return;
+        }
+        const meRes = meSettled.value;
         const u = meRes.data?.user || meRes.data;
         setUser(u || null);
-        const profile = profileRes.data?.profile;
-        const nextForm = profileToForm(profile);
-        setForm(nextForm);
-        setBaseline(nextForm);
-        setDirectEditAvailable(!!profileRes.data?.direct_edit_available);
-        setPendingRequest(profileRes.data?.pending_request || null);
-        setAvatarPath(
-          pickAvatarPath(profile) ||
-            pickAvatarPath(u) ||
-            (typeof profile?.avatar === "string" ? profile.avatar : null) ||
-            (typeof u?.avatar === "string" ? u.avatar : null),
-        );
+
+        if (profileSettled.status === "fulfilled") {
+          const profileRes = profileSettled.value;
+          const profile = profileRes.data?.profile;
+          const nextForm = profileToForm(profile);
+          setForm(nextForm);
+          setBaseline(nextForm);
+          setDirectEditAvailable(!!profileRes.data?.direct_edit_available);
+          setPendingRequest(profileRes.data?.pending_request || null);
+          setAvatarPath(
+            pickAvatarPath(profile) ||
+              pickAvatarPath(u) ||
+              (typeof profile?.avatar === "string" ? profile.avatar : null) ||
+              (typeof u?.avatar === "string" ? u.avatar : null),
+          );
+        } else {
+          setAvatarPath(
+            pickAvatarPath(u) || (typeof u?.avatar === "string" ? u.avatar : null),
+          );
+        }
       })
-      .catch((e) => toast.error(e.message || "Không tải được hồ sơ"))
       .finally(() => setLoading(false));
   }
 
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (isAdmin && tab === "requests") setTab("security");
+  }, [isAdmin, tab]);
 
   function resetForm() {
     setForm(baseline);
@@ -187,16 +209,18 @@ export default function ProfilePage() {
     form.full_name ||
     user?.name ||
     (session?.user as { name?: string } | undefined)?.name ||
-    "Giáo viên";
+    (isAdmin ? "Admin" : "Giáo viên");
   const email =
     user?.email || (session?.user as { email?: string } | undefined)?.email || "";
   const role = user?.role;
   const pendingCount = pendingRequest ? 1 : 0;
 
   const tabs: Array<{ id: TabId; label: string; icon: typeof UserRound; badge?: number }> = [
-    { id: "pedagogy", label: "Thông tin cá nhân", icon: UserRound },
+    { id: "pedagogy", label: isAdmin ? "Thông tin tài khoản" : "Thông tin cá nhân", icon: UserRound },
     { id: "security", label: "Bảo mật & Mật khẩu", icon: Shield },
-    { id: "requests", label: "Yêu cầu thay đổi", icon: History, badge: pendingCount },
+    ...(!isAdmin
+      ? [{ id: "requests" as const, label: "Yêu cầu thay đổi", icon: History, badge: pendingCount }]
+      : []),
   ];
 
   if (loading) {
@@ -221,9 +245,12 @@ export default function ProfilePage() {
             Hồ sơ cá nhân & Cài đặt tài khoản
           </h1>
           <p className="text-sm text-on-surface-variant">
-            Quản lý hồ sơ giảng viên, quyền danh mục và thông tin xác thực LMS Sáng Tạo Xanh.
+            {isAdmin
+              ? "Quản lý thông tin tài khoản admin và đổi mật khẩu LMS Sáng Tạo Xanh."
+              : "Quản lý hồ sơ giảng viên, quyền danh mục và thông tin xác thực LMS Sáng Tạo Xanh."}
           </p>
         </div>
+        {!isAdmin ? (
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
           <button type="button" className="btn btn-ghost" onClick={resetForm} disabled={saving}>
             Hủy bỏ
@@ -242,8 +269,10 @@ export default function ProfilePage() {
                 : "Lưu / Gửi duyệt"}
           </button>
         </div>
+        ) : null}
       </div>
 
+      {!isAdmin ? (
       <div className="relative overflow-hidden rounded-xl bg-surface p-4 shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
         <div className="absolute bottom-0 left-0 top-0 w-1.5 bg-primary" />
         <div className="flex flex-col gap-3 pl-3 md:flex-row md:items-center md:justify-between">
@@ -283,6 +312,7 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+      ) : null}
 
       <div className="relative overflow-hidden rounded-xl bg-surface p-6 shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
         <div className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
@@ -458,6 +488,11 @@ export default function ProfilePage() {
             <span className="h-2.5 w-2.5 rounded-full bg-primary" />
             <h3 className="text-lg font-semibold text-foreground">Đổi mật khẩu</h3>
           </div>
+          <p className="text-sm text-on-surface-variant">
+            {isAdmin
+              ? "Đổi mật khẩu tài khoản admin. Sau khi đổi, dùng mật khẩu mới để đăng nhập lần sau."
+              : "Đổi mật khẩu tài khoản LMS của bạn."}
+          </p>
           <Field label="Mật khẩu hiện tại">
             <input
               className="input"
@@ -466,6 +501,7 @@ export default function ProfilePage() {
               value={pw.current_password}
               onChange={(e) => setPw({ ...pw, current_password: e.target.value })}
               required
+              disabled={pwSaving}
             />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -478,6 +514,7 @@ export default function ProfilePage() {
                 onChange={(e) => setPw({ ...pw, password: e.target.value })}
                 required
                 minLength={4}
+                disabled={pwSaving}
               />
             </Field>
             <Field label="Xác nhận mật khẩu">
@@ -489,6 +526,7 @@ export default function ProfilePage() {
                 onChange={(e) => setPw({ ...pw, password_confirmation: e.target.value })}
                 required
                 minLength={4}
+                disabled={pwSaving}
               />
             </Field>
           </div>
