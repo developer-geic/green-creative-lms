@@ -41,7 +41,7 @@ flowchart LR
 | Không enroll trùng | Cùng HV không được enroll hai lần trong một lớp (soft-delete có thể restore). |
 | Lớp khóa | `inactive` / `ended` → `is_locked`: không sửa nội dung, không enroll / điểm danh / tiến độ / đánh giá. |
 | Sĩ số | Min 5 (cảnh báo `below_min_size`); max **15** enrollment active (không `dropped`) — BE enforce. |
-| Mã tự sinh | Class / catalog `code` do server sinh; **immutable** khi update. Chi tiết: `lms-auto-codes.mdc`. Class: `{course_slug}-{NN}` qua `LmsCodeGenerator::nextClassCode`. |
+| Mã lớp/danh mục | `code` optional khi create (server auto-gen nếu trống); **editable** khi update (unique). System catalog rows không đổi `code`. Chi tiết: `lms-auto-codes.mdc`. Class default: `{course_slug}-{NN}` qua `LmsCodeGenerator::nextClassCode`. |
 
 ---
 

@@ -39,6 +39,8 @@ export type LmsClass = {
   program_id?: number | null;
   course_id?: number | null;
   program?: string | null;
+  program_code?: string | null;
+  program_color?: string | null;
   course?: string | null;
   schedule?: string | null;
   time?: string | null;

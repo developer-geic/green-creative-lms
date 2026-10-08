@@ -40,13 +40,14 @@ const REQUEST_STATUS_LABELS: Record<string, string> = {
 };
 
 const CLASS_STATUS_LABELS: Record<string, string> = {
-  active: "Đang hoạt động",
-  inactive: "Ngừng hoạt động",
+  active: "Đang học",
+  inactive: "Chờ khai giảng / tuyển sinh",
   ended: "Đã kết thúc",
 };
 
 const CLASS_ROLE_LABELS: Record<string, string> = {
   teacher: "Giáo viên",
+  ta: "Trợ giảng",
   assistant: "Trợ giảng",
   lead: "Giáo viên chính",
 };
@@ -87,7 +88,8 @@ export function classStatusLabel(status?: string | null): string {
 
 export function classStatusPillClass(status?: string | null): string {
   if (status === "active") return "pill pill-good";
-  if (status === "ended") return "pill pill-warn";
+  if (status === "inactive") return "pill pill-warn";
+  if (status === "ended") return "pill pill-danger";
   return "pill pill-neutral";
 }
 

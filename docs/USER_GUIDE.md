@@ -190,16 +190,16 @@ Trên màn hình nhỏ (dưới 768px), menu nằm trong **ngăn kéo (drawer)**
 
 **Tạo lớp** — cần `classes.create`:
 1. Bấm **Thêm lớp**.
-2. Chọn **Chương trình** và **Khóa học** từ danh mục (cascade), lịch, giờ, phòng. **Mã lớp** tự tạo từ tên khóa học + số thứ tự (vd. `scratch_jr-01`).
+2. Chọn **Chương trình** và **Khóa học** từ danh mục (cascade), lịch, giờ, phòng. **Mã lớp** tuỳ chọn — để trống sẽ tự tạo từ tên khóa học + số thứ tự (vd. `scratch_jr-01`); có thể sửa mã sau khi tạo.
 3. Chọn **ngày trong tuần** (CN–T7) — dùng để sinh buổi điểm danh.
-4. Chọn **ít nhất một giáo viên** phụ trách lớp.
-5. Lưu → lớp **Đang hoạt động**.
+4. Chọn **ít nhất một giáo viên** (hoặc trợ giảng TA) phụ trách lớp.
+5. Lưu → lớp **Đang học**.
 
 **Trạng thái lớp**
 | Status | Ý nghĩa | Sửa nội dung? |
 |--------|---------|----------------|
 | `active` | Đang học | Có (nếu có quyền update tương ứng) |
-| `inactive` | Ngừng (thường chỉ Admin đặt) | Không |
+| `inactive` | Chờ khai giảng / tuyển sinh (thường chỉ Admin đặt) | Không |
 | `ended` | Đã kết thúc | Không |
 
 - **Sửa / Kết thúc lớp:** cần `classes.update`.
@@ -222,7 +222,8 @@ Trên màn hình nhỏ (dưới 768px), menu nằm trong **ngăn kéo (drawer)**
 *(Cần `catalogs.view` + quyền từng tab)*
 - Tab: Chương trình · Khóa học · Trạng thái HV · Mức tiếp thu — mỗi tab gắn `programs.*` / `courses.*` / …
 - Nút Thêm / Sửa / Xóa theo `create` / `update` / `delete` của từng resource.
-- **Mã** tự sinh từ tên khi thêm; không sửa mã sau khi tạo.
+- **Mã** tuỳ chọn khi thêm (để trống → tự sinh từ tên); có thể sửa sau khi tạo (mã mục hệ thống `is_system` không đổi được).
+- **Chương trình** có thể gán **màu** (hiển thị chip trên danh sách lớp).
 - Mục hệ thống (`is_system`) không xóa được; có thể soft-disable `is_active`.
 
 ### Điểm danh

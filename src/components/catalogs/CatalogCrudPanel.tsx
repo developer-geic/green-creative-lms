@@ -55,12 +55,16 @@ export function CatalogCrudPanel({
   canDelete?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [programId, setProgramId] = useState("");
   const [color, setColor] = useState("");
   const [editing, setEditing] = useState<LmsCatalogItem | null>(null);
+  const showColor = mode === "statuses" || mode === "programs";
+  const codeLocked = !!(editing?.is_system);
 
   function resetForm() {
+    setCode("");
     setName("");
     setProgramId("");
     setColor("");
@@ -69,6 +73,7 @@ export function CatalogCrudPanel({
 
   function startEdit(item: LmsCatalogItem) {
     setEditing(item);
+    setCode(item.code || "");
     setName(item.name);
     setProgramId(item.program_id ? String(item.program_id) : "");
     setColor(item.color || "");
@@ -82,11 +87,15 @@ export function CatalogCrudPanel({
           name,
           is_active: true,
         };
+        const trimmedCode = code.trim();
+        if (trimmedCode && !codeLocked) {
+          body.code = trimmedCode;
+        }
         if (mode === "courses") {
           body.program_id = programId ? Number(programId) : null;
         }
-        if (mode === "statuses" && color) {
-          body.color = color;
+        if (showColor) {
+          body.color = color.trim() || null;
         }
         const api = API[mode];
         if (editing) {
@@ -136,16 +145,24 @@ export function CatalogCrudPanel({
     <div className="space-y-4">
       {canCreate || (editing && canUpdate) ? (
       <form onSubmit={submit} className="card grid gap-3 md:grid-cols-2">
-        {editing ? (
-          <div className="flex flex-col gap-1 md:col-span-2">
-            <label className="text-xs font-semibold text-on-surface-variant">Mã (không đổi)</label>
-            <input className="input font-mono text-xs" value={editing.code} disabled readOnly />
-          </div>
-        ) : (
-          <p className="text-xs text-on-surface-variant md:col-span-2">
-            Mã được tạo tự động từ tên hiển thị.
-          </p>
-        )}
+        <div className="flex flex-col gap-1 md:col-span-2">
+          <label className="text-xs font-semibold text-on-surface-variant">
+            Mã {codeLocked ? "(hệ thống — không đổi)" : "(tuỳ chọn)"}
+          </label>
+          <input
+            className="input font-mono text-xs"
+            placeholder="Để trống sẽ tự tạo từ tên"
+            value={code}
+            disabled={codeLocked}
+            readOnly={codeLocked}
+            onChange={(e) => setCode(e.target.value)}
+          />
+          {!codeLocked ? (
+            <p className="text-[11px] text-on-surface-variant">
+              Không bắt buộc khi thêm — để trống hệ thống tự sinh từ tên hiển thị.
+            </p>
+          ) : null}
+        </div>
         <input
           className="input md:col-span-2"
           required
@@ -167,7 +184,7 @@ export function CatalogCrudPanel({
             ))}
           </select>
         )}
-        {mode === "statuses" && (
+        {showColor && (
           <input
             className="input md:col-span-2"
             placeholder="Màu (tuỳ chọn, vd. #16a34a)"
@@ -202,6 +219,7 @@ export function CatalogCrudPanel({
                 <th className="py-2">Mã</th>
                 <th>Tên</th>
                 {mode === "courses" && <th>Chương trình</th>}
+                {showColor && <th>Màu</th>}
                 <th>TT</th>
                 <th />
               </tr>
@@ -213,6 +231,21 @@ export function CatalogCrudPanel({
                   <td className="font-medium">{item.name}</td>
                   {mode === "courses" && (
                     <td>{item.program?.name || "—"}</td>
+                  )}
+                  {showColor && (
+                    <td>
+                      {item.color ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs">
+                          <span
+                            className="inline-block h-3 w-3 rounded-sm border border-border"
+                            style={{ backgroundColor: item.color }}
+                          />
+                          {item.color}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                   )}
                   <td>
                     {canUpdate ? (

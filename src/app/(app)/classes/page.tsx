@@ -2,16 +2,14 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useEffect, useMemo, useState, useTransition } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useSession } from "next-auth/react";
 import {
   Download,
   Eye,
-  Filter,
   Pencil,
   PlayCircle,
   Plus,
-  RefreshCw,
   Trash2,
   TrendingUp,
   UserCheck,
@@ -22,6 +20,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SearchField } from "@/components/SearchField";
 import { SelectField } from "@/components/SelectField";
 import { TimeRangeField } from "@/components/TimeRangeField";
+import { Tooltip } from "@/components/Tooltip";
 import { useCatalog } from "@/hooks/useCatalog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { lmsApi } from "@/lib/api";
@@ -29,8 +28,8 @@ import { buildQuery, cn } from "@/lib/utils";
 import type { LmsClass, LmsUser } from "@/types/lms";
 
 const STATUS_LABELS: Record<string, string> = {
-  active: "Đang hoạt động",
-  inactive: "Ngừng hoạt động",
+  active: "Đang học",
+  inactive: "Chờ khai giảng / tuyển sinh",
   ended: "Đã kết thúc",
 };
 
@@ -40,21 +39,14 @@ const STATUS_OPTIONS = [
   { value: "ended", label: STATUS_LABELS.ended },
 ];
 
+type TeacherAssignment = { lms_user_id: number; role: "teacher" | "ta" };
+
 function formatClassDate(value?: string | null): string {
-  if (!value) return "";
+  if (!value) return "—";
   const raw = String(value).slice(0, 10);
   const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return raw;
   return `${m[3]}/${m[2]}/${m[1]}`;
-}
-
-function formatClassDateRange(start?: string | null, end?: string | null): string {
-  const a = formatClassDate(start);
-  const b = formatClassDate(end);
-  if (a && b) return `${a} – ${b}`;
-  if (a) return `Từ ${a}`;
-  if (b) return `Đến ${b}`;
-  return "";
 }
 
 type PendingAction =
@@ -64,22 +56,88 @@ type PendingAction =
   | { type: "update" };
 
 function StatusPill({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    active: "pill-good",
-    inactive: "pill-neutral",
-    ended: "pill-warn",
+  const map: Record<string, { pill: string; dot: string }> = {
+    active: { pill: "pill-good", dot: "bg-primary-dark" },
+    inactive: { pill: "pill-warn", dot: "bg-amber-700" },
+    ended: { pill: "pill-danger", dot: "bg-red-800" },
   };
+  const style = map[status] || { pill: "pill-neutral", dot: "bg-on-surface-variant" };
   return (
-    <span className={`pill ${map[status] || "pill-neutral"}`}>
+    <span className={`pill ${style.pill}`}>
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} aria-hidden />
       {STATUS_LABELS[status] || status}
     </span>
+  );
+}
+
+/** Soft pastel chip from hex (light bg + darker text), matching list mockup. */
+function pastelChipStyle(hex?: string | null): { backgroundColor: string; color: string } {
+  const raw = (hex || "#64748b").trim();
+  const m = raw.match(/^#?([0-9a-f]{6})$/i);
+  if (!m) {
+    return { backgroundColor: "#f1f5f9", color: "#475569" };
+  }
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const mix = (c: number, toward: number, t: number) => Math.round(c + (toward - c) * t);
+  // Light wash for bg; slightly darkened for text
+  const bg = `rgb(${mix(r, 255, 0.82)}, ${mix(g, 255, 0.82)}, ${mix(b, 255, 0.82)})`;
+  const fg = `rgb(${mix(r, 0, 0.35)}, ${mix(g, 0, 0.35)}, ${mix(b, 0, 0.35)})`;
+  return { backgroundColor: bg, color: fg };
+}
+
+/** Short badge label for program (e.g. "CT thiếu nhi" → "Thiếu nhi", "IELTS …" → "IELTS"). */
+function programBadgeLabel(program?: string | null, code?: string | null): string {
+  const name = (program || "").trim();
+  const upper = name.toUpperCase();
+  if (upper.includes("IELTS")) return "IELTS";
+  if (upper.includes("TOEIC")) return "TOEIC";
+  if (upper.includes("HSK")) return "HSK";
+  if (/\bTEEN\b/.test(upper)) return "TEEN";
+  if (upper.includes("GIAO TI") || upper.includes("1:1") || upper.includes("1-1")) return "Giao tiếp";
+  if (upper.includes("THIẾU NHI") || upper.includes("THIEU NHI") || upper.includes("AVTN")) {
+    return "Thiếu nhi";
+  }
+  const stripped = name.replace(/^CT\s+/i, "").trim();
+  if (stripped && stripped.length <= 24) return stripped;
+  if (code) return code.replace(/_/g, " ").toUpperCase();
+  return stripped || name;
+}
+
+function ProgramCourseCell({
+  course,
+  program,
+  programColor,
+  programCode,
+}: {
+  course?: string | null;
+  program?: string | null;
+  programColor?: string | null;
+  programCode?: string | null;
+}) {
+  const badge = programBadgeLabel(program, programCode);
+  return (
+    <div className="flex flex-col items-center gap-1 text-center">
+      <span className="text-sm font-bold text-foreground">{course?.trim() || "—"}</span>
+      {badge ? (
+        <span
+          className="inline-flex max-w-full items-center truncate rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+          style={pastelChipStyle(programColor)}
+          title={program || badge}
+        >
+          {badge}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
 function ClassesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session, status: sessionStatus } = useSession();
+  const { status: sessionStatus } = useSession();
   const { can, ready: permsReady, isAdmin } = usePermissions();
   const [, startTransition] = useTransition();
 
@@ -91,27 +149,34 @@ function ClassesContent() {
   const [accessChecked, setAccessChecked] = useState(false);
   const [teacherOptions, setTeacherOptions] = useState<LmsUser[]>([]);
   const [items, setItems] = useState<LmsClass[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const pendingEditId = useRef(searchParams.get("edit"));
   const [q, setQ] = useState(searchParams.get("q") || "");
+  const [filterProgramId, setFilterProgramId] = useState(searchParams.get("program_id") || "");
+  const [filterTeacherId, setFilterTeacherId] = useState(
+    searchParams.get("teacher_ids[]") || searchParams.get("teacher_ids") || "",
+  );
   const [statuses, setStatuses] = useState<string[]>(
     searchParams.getAll("status[]").length
       ? searchParams.getAll("status[]")
       : searchParams.get("status")
         ? [searchParams.get("status")!]
-        : ["active"],
+        : [],
   );
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<LmsClass | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [actionPending, setActionPending] = useState(false);
   const [form, setForm] = useState({
+    code: "",
     program_id: "" as string,
     course_id: "" as string,
     schedule: "",
     time: "",
     room: "",
     days: [] as number[],
-    teacher_ids: [] as number[],
+    teachers: [] as TeacherAssignment[],
     min_class_size: "5",
     max_class_size: "15",
     start_date: "",
@@ -120,13 +185,14 @@ function ClassesContent() {
 
   const modalOpen = showCreate || editing != null;
   const emptyForm = {
+    code: "",
     program_id: "",
     course_id: "",
     schedule: "",
     time: "",
     room: "",
     days: [] as number[],
-    teacher_ids: [] as number[],
+    teachers: [] as TeacherAssignment[],
     min_class_size: "5",
     max_class_size: "15",
     start_date: "",
@@ -168,28 +234,30 @@ function ClassesContent() {
       return;
     }
     setAccessChecked(true);
-    if (canCreateClasses || canUpdateClasses || isAdmin) {
-      lmsApi
-        .users("?role=teacher&status=approved&limit=100")
-        .then((usersRes) => {
-          setTeacherOptions(Array.isArray(usersRes.data) ? usersRes.data : []);
-        })
-        .catch(() => setTeacherOptions([]));
-    }
+    lmsApi
+      .users("?role=teacher&status=approved&limit=100")
+      .then((usersRes) => {
+        setTeacherOptions(Array.isArray(usersRes.data) ? usersRes.data : []);
+      })
+      .catch(() => setTeacherOptions([]));
   }, [
     sessionStatus,
     permsReady,
     canViewClasses,
-    canCreateClasses,
-    canUpdateClasses,
-    isAdmin,
     router,
   ]);
 
-  function load() {
+  function fetchClasses(params: {
+    q: string;
+    status: string[];
+    program_id: string;
+    teacher_id: string;
+  }) {
     const query = buildQuery({
-      q,
-      status: statuses,
+      q: params.q,
+      status: params.status,
+      program_id: params.program_id || undefined,
+      teacher_ids: params.teacher_id ? [params.teacher_id] : undefined,
     });
     router.replace(`/classes${query}`);
     setLoading(true);
@@ -198,6 +266,8 @@ function ClassesContent() {
       .then((res) => {
         startTransition(() => {
           setItems(Array.isArray(res.data) ? res.data : []);
+          const metaTotal = res.meta?.total;
+          setTotalCount(typeof metaTotal === "number" ? metaTotal : Array.isArray(res.data) ? res.data.length : 0);
           setLoading(false);
         });
       })
@@ -207,31 +277,78 @@ function ClassesContent() {
       });
   }
 
+  function load() {
+    fetchClasses({
+      q,
+      status: statuses,
+      program_id: filterProgramId,
+      teacher_id: filterTeacherId,
+    });
+  }
+
   useEffect(() => {
     if (!accessChecked) return;
     load();
      
   }, [accessChecked]);
 
-  function setStatusFilter(next: string[], qOverride?: string) {
-    const search = qOverride !== undefined ? qOverride : q;
-    setStatuses(next);
-    if (qOverride !== undefined) setQ(qOverride);
-    const query = buildQuery({ q: search, status: next });
-    router.replace(`/classes${query}`);
-    setLoading(true);
+  useEffect(() => {
+    const editId = pendingEditId.current;
+    if (!editId || !accessChecked || !canUpdateClasses || loading) return;
+
+    const fromList = items.find((c) => String(c.id) === editId);
+    if (fromList) {
+      pendingEditId.current = null;
+      openEdit(fromList);
+      return;
+    }
+
+    pendingEditId.current = null;
     lmsApi
-      .classes(query)
+      .classDetail(editId)
       .then((res) => {
-        startTransition(() => {
-          setItems(Array.isArray(res.data) ? res.data : []);
-          setLoading(false);
-        });
+        if (res.data) openEdit(res.data as LmsClass);
       })
-      .catch((e) => {
-        toast.error(e.message);
-        setLoading(false);
-      });
+      .catch(() => {});
+     
+  }, [accessChecked, canUpdateClasses, items, loading]);
+
+  function clearFilters() {
+    setQ("");
+    setFilterProgramId("");
+    setFilterTeacherId("");
+    setStatuses([]);
+    fetchClasses({ q: "", status: [], program_id: "", teacher_id: "" });
+  }
+
+  function applyStatusFilter(next: string[]) {
+    setStatuses(next);
+    fetchClasses({
+      q,
+      status: next,
+      program_id: filterProgramId,
+      teacher_id: filterTeacherId,
+    });
+  }
+
+  function applyProgramFilter(programId: string) {
+    setFilterProgramId(programId);
+    fetchClasses({
+      q,
+      status: statuses,
+      program_id: programId,
+      teacher_id: filterTeacherId,
+    });
+  }
+
+  function applyTeacherFilter(teacherId: string) {
+    setFilterTeacherId(teacherId);
+    fetchClasses({
+      q,
+      status: statuses,
+      program_id: filterProgramId,
+      teacher_id: teacherId,
+    });
   }
 
   function toggleDay(day: number) {
@@ -259,13 +376,17 @@ function ClassesContent() {
     setShowCreate(false);
     setEditing(c);
     setForm({
+      code: c.code || "",
       program_id: c.program_id != null ? String(c.program_id) : "",
       course_id: c.course_id != null ? String(c.course_id) : "",
       schedule: c.schedule || "",
       time: c.time || "",
       room: c.room || "",
       days: Array.isArray(c.days) ? [...c.days] : [],
-      teacher_ids: (c.teachers || []).map((t) => t.lms_user_id),
+      teachers: (c.teachers || []).map((t) => ({
+        lms_user_id: t.lms_user_id,
+        role: t.role === "ta" ? "ta" : "teacher",
+      })),
       min_class_size: String(c.min_class_size ?? 5),
       max_class_size: String(c.max_class_size ?? 15),
       start_date: c.start_date ? String(c.start_date).slice(0, 10) : "",
@@ -274,11 +395,21 @@ function ClassesContent() {
   }
 
   function toggleTeacher(id: number) {
+    setForm((prev) => {
+      const exists = prev.teachers.some((t) => t.lms_user_id === id);
+      return {
+        ...prev,
+        teachers: exists
+          ? prev.teachers.filter((t) => t.lms_user_id !== id)
+          : [...prev.teachers, { lms_user_id: id, role: "teacher" as const }],
+      };
+    });
+  }
+
+  function setTeacherRole(id: number, role: "teacher" | "ta") {
     setForm((prev) => ({
       ...prev,
-      teacher_ids: prev.teacher_ids.includes(id)
-        ? prev.teacher_ids.filter((x) => x !== id)
-        : [...prev.teacher_ids, id],
+      teachers: prev.teachers.map((t) => (t.lms_user_id === id ? { ...t, role } : t)),
     }));
   }
 
@@ -295,11 +426,10 @@ function ClassesContent() {
       start_date: form.start_date || null,
       end_date: form.end_date || null,
     };
+    const code = form.code.trim();
+    if (code) body.code = code;
     if (isAdmin) {
-      body.teachers = form.teacher_ids.map((lms_user_id) => ({
-        lms_user_id,
-        role: "teacher",
-      }));
+      body.teachers = form.teachers;
     }
     return body;
   }
@@ -314,7 +444,7 @@ function ClassesContent() {
       toast.error("Chọn khóa học");
       return;
     }
-    if (!form.teacher_ids.length) {
+    if (!form.teachers.length) {
       toast.error("Chọn ít nhất một giáo viên phụ trách lớp");
       return;
     }
@@ -353,7 +483,7 @@ function ClassesContent() {
       return;
     }
     if (editing) {
-      if (isAdmin && !form.teacher_ids.length) {
+      if (isAdmin && !form.teachers.length) {
         toast.error("Chọn ít nhất một giáo viên phụ trách lớp");
         return;
       }
@@ -535,63 +665,61 @@ function ClassesContent() {
         </div>
       </div>
 
-      <div className="card flex flex-col gap-4 !p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-low p-1.5">
-          <div className="flex items-center gap-1 overflow-x-auto">
-            {(
-              [
-                { key: "all", label: "Tất cả", value: [] as string[] },
-                { key: "active", label: "Đang hoạt động", value: ["active"] },
-                { key: "inactive", label: "Ngừng hoạt động", value: ["inactive"] },
-                { key: "ended", label: "Đã kết thúc", value: ["ended"] },
-              ] as const
-            ).map((tab) => {
-              const selected =
-                tab.value.length === 0
-                  ? statuses.length === 0
-                  : statuses.length === 1 && statuses[0] === tab.value[0];
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  className={cn(
-                    "whitespace-nowrap rounded-md px-4 py-1.5 text-xs font-semibold transition-colors",
-                    selected
-                      ? "bg-surface text-primary shadow-sm"
-                      : "text-on-surface-variant hover:text-foreground",
-                  )}
-                  onClick={() => setStatusFilter([...tab.value])}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-2 lg:grid-cols-12">
+      <div className="card !p-4">
+        <div className="flex flex-wrap items-center gap-2">
           <SearchField
             className="w-full"
-            wrapperClassName="w-full sm:max-w-xs lg:col-span-5 lg:max-w-none"
+            wrapperClassName="min-w-[12rem] flex-1 basis-[14rem]"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Tìm theo mã lớp (STX-...), tên khóa học..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter") load();
+            }}
+            placeholder="Tìm mã lớp, khóa học..."
             type="text"
           />
-          <div className="flex w-full items-center justify-stretch gap-1.5 sm:justify-end lg:col-span-7">
-            <button type="button" className="btn btn-ghost h-10 flex-1 sm:flex-none" onClick={load}>
-              <Filter className="h-4 w-4" />
-              Lọc
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost h-10 !px-2"
-              title="Đặt lại bộ lọc"
-              onClick={() => setStatusFilter(["active"], "")}
-            >
-              <RefreshCw className="h-4 w-4" />
-            </button>
-          </div>
+          <SelectField
+            className="min-w-[10rem] flex-1 basis-[10rem] sm:flex-none sm:w-44"
+            aria-label="Lọc theo chương trình"
+            value={filterProgramId}
+            placeholder="Chương trình"
+            options={[
+              { value: "", label: "Tất cả chương trình" },
+              ...programs.map((p) => ({ value: String(p.id), label: p.name })),
+            ]}
+            onChange={applyProgramFilter}
+          />
+          <SelectField
+            className="min-w-[10rem] flex-1 basis-[10rem] sm:flex-none sm:w-44"
+            aria-label="Lọc theo giáo viên"
+            value={filterTeacherId}
+            placeholder="Giáo viên"
+            options={[
+              { value: "", label: "Tất cả giáo viên" },
+              ...teacherOptions.map((t) => ({
+                value: String(t.id),
+                label: t.name || t.email,
+              })),
+            ]}
+            onChange={applyTeacherFilter}
+          />
+          <SelectField
+            className="min-w-[10rem] flex-1 basis-[10rem] sm:flex-none sm:w-52"
+            aria-label="Lọc theo trạng thái"
+            value={statuses.length === 1 ? statuses[0] : ""}
+            placeholder="Trạng thái"
+            options={[
+              { value: "", label: "Tất cả trạng thái" },
+              ...STATUS_OPTIONS,
+            ]}
+            onChange={(v) => applyStatusFilter(v ? [v] : [])}
+          />
+          <button type="button" className="btn btn-ghost h-10 shrink-0" onClick={clearFilters}>
+            Xóa lọc
+          </button>
+          <span className="shrink-0 text-xs font-semibold text-on-surface-variant whitespace-nowrap">
+            {loading ? "…" : `${totalCount} lớp`}
+          </span>
         </div>
       </div>
 
@@ -601,9 +729,12 @@ function ClassesContent() {
             <thead>
               <tr className="border-b border-border bg-surface-low text-xs font-semibold text-on-surface-variant">
                 <th className="whitespace-nowrap px-4 py-3">Mã Lớp</th>
-                <th className="whitespace-nowrap px-4 py-3">Khóa học & Chương trình</th>
+                <th className="whitespace-nowrap px-4 py-3">Chương trình / Khóa học</th>
                 <th className="whitespace-nowrap px-4 py-3">Lịch học</th>
-                <th className="whitespace-nowrap px-4 py-3">Phòng học</th>
+                <th className="whitespace-nowrap px-1 py-2">Ngày khai giảng</th>
+                <th className="whitespace-nowrap px-1 py-2">Ngày kết thúc</th>
+                <th className="whitespace-nowrap px-4 py-2">Phòng</th>
+                <th className="whitespace-nowrap px-4 py-3">Giáo viên</th>
                 <th className="whitespace-nowrap px-4 py-3 w-44">Sĩ số</th>
                 <th className="whitespace-nowrap px-4 py-3 text-center">Trạng thái</th>
                 <th className="whitespace-nowrap px-4 py-3 pr-6 text-right">Hành động</th>
@@ -613,7 +744,8 @@ function ClassesContent() {
               {items.map((c) => {
                 const max = c.max_class_size || 15;
                 const pct = max > 0 ? Math.round(((c.active_student_count || 0) / max) * 100) : 0;
-                const dateRange = formatClassDateRange(c.start_date, c.end_date);
+                const mainTeachers = (c.teachers || []).filter((t) => t.role !== "ta");
+                const tas = (c.teachers || []).filter((t) => t.role === "ta");
                 return (
                   <tr
                     key={c.id}
@@ -623,30 +755,49 @@ function ClassesContent() {
                     )}
                   >
                     <td className="px-4 py-3.5 font-semibold">
-                      <span className="inline-flex items-center gap-1.5 rounded-md bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary-dark">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                      <span className="inline-flex items-center gap-1.5 rounded-md bg-primary-soft px-2.5 py-1 font-mono text-[11px] font-semibold text-primary-dark">
                         {c.code}
                       </span>
                     </td>
                     <td className="px-4 py-3.5">
-                      <div className="flex flex-col">
-                        <span className="font-semibold">{c.course || "—"}</span>
-                        <span className="text-[11px] text-on-surface-variant">{c.program || ""}</span>
-                      </div>
+                      <ProgramCourseCell
+                        course={c.course}
+                        program={c.program}
+                        programColor={c.program_color}
+                        programCode={c.program_code}
+                      />
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex flex-col">
                         <span className="font-medium">{c.schedule || "—"}</span>
                         <span className="text-[11px] text-on-surface-variant">{c.time || ""}</span>
-                        {dateRange ? (
-                          <span className="text-[11px] text-on-surface-variant">{dateRange}</span>
-                        ) : null}
                       </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-1.5 text-xs">
+                      {formatClassDate(c.start_date)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-1.5 text-xs">
+                      {formatClassDate(c.end_date)}
                     </td>
                     <td className="px-4 py-3.5">
                       <span className="rounded bg-surface-low px-2 py-1 font-mono text-xs">
                         {c.room || "—"}
                       </span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex min-w-[8rem] flex-col gap-0.5 text-xs">
+                        <span className="font-medium">
+                          {mainTeachers.length
+                            ? mainTeachers.map((t) => t.name || t.email || "—").join(", ")
+                            : "—"}
+                        </span>
+                        <span className="text-on-surface-variant">
+                          TA:{" "}
+                          {tas.length
+                            ? tas.map((t) => t.name || t.email || "—").join(", ")
+                            : "—"}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex flex-col gap-1">
@@ -675,70 +826,82 @@ function ClassesContent() {
                     <td className="px-4 py-3.5 pr-6 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {!c.is_locked ? (
+                          <Tooltip content="Điểm danh">
+                            <Link
+                              href={`/attendance?class_id=${c.id}`}
+                              className="btn btn-primary !px-2.5 !py-1 text-[11px]"
+                              aria-label="Điểm danh"
+                            >
+                              <UserCheck className="h-3.5 w-3.5" />
+                            </Link>
+                          </Tooltip>
+                        ) : null}
+                        <Tooltip content="Xem chi tiết">
                           <Link
-                            href={`/attendance?class_id=${c.id}`}
-                            className="btn btn-primary !px-2.5 !py-1 text-[11px]"
-                          >
-                            <UserCheck className="h-3.5 w-3.5" />
-                            Điểm danh
-                          </Link>
-                        ) : null}
-                        <Link
-                          href={`/classes/${c.id}`}
-                          className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
-                          title="Xem chi tiết"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Link>
-                        {!c.is_locked && canUpdateClasses ? (
-                          <button
-                            type="button"
+                            href={`/classes/${c.id}`}
                             className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
-                            title="Chỉnh sửa"
-                            onClick={() => openEdit(c)}
+                            aria-label="Xem chi tiết"
                           >
-                            <Pencil className="h-4 w-4" />
-                          </button>
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                        </Tooltip>
+                        {!c.is_locked && canUpdateClasses ? (
+                          <Tooltip content="Chỉnh sửa lớp">
+                            <button
+                              type="button"
+                              className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
+                              aria-label="Chỉnh sửa lớp"
+                              onClick={() => openEdit(c)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                          </Tooltip>
                         ) : null}
                         {!c.is_locked && canUpdateClasses ? (
-                          <button
-                            type="button"
-                            className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
-                            title="Kết thúc lớp"
-                            onClick={() => setPendingAction({ type: "end", id: c.id, code: c.code })}
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </button>
+                          <Tooltip content="Kết thúc lớp">
+                            <button
+                              type="button"
+                              className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
+                              aria-label="Kết thúc lớp"
+                              onClick={() => setPendingAction({ type: "end", id: c.id, code: c.code })}
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          </Tooltip>
                         ) : null}
                         {canDeleteClasses && !c.is_locked ? (
-                          <button
-                            type="button"
-                            className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
-                            title="Xóa lớp"
-                            onClick={() =>
-                              setPendingAction({ type: "delete", id: c.id, code: c.code })
-                            }
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <Tooltip content="Xóa lớp">
+                            <button
+                              type="button"
+                              className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
+                              aria-label="Xóa lớp"
+                              onClick={() =>
+                                setPendingAction({ type: "delete", id: c.id, code: c.code })
+                              }
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </Tooltip>
                         ) : null}
                         {isAdmin ? (
-                          <SelectField
-                            size="sm"
-                            className="w-[9.5rem]"
-                            aria-label={`Trạng thái lớp ${c.code}`}
-                            value={c.status}
-                            options={STATUS_OPTIONS}
-                            onChange={(status) => {
-                              if (status === c.status) return;
-                              setPendingAction({
-                                type: "status",
-                                id: c.id,
-                                code: c.code,
-                                status,
-                              });
-                            }}
-                          />
+                          <Tooltip content="Đổi trạng thái lớp">
+                            <SelectField
+                              size="sm"
+                              className="w-[7.5rem]"
+                              aria-label={`Trạng thái lớp ${c.code}`}
+                              value={c.status}
+                              options={STATUS_OPTIONS}
+                              onChange={(status) => {
+                                if (status === c.status) return;
+                                setPendingAction({
+                                  type: "status",
+                                  id: c.id,
+                                  code: c.code,
+                                  status,
+                                });
+                              }}
+                            />
+                          </Tooltip>
                         ) : null}
                       </div>
                     </td>
@@ -750,9 +913,7 @@ function ClassesContent() {
         </div>
         <div className="flex items-center justify-between gap-2 bg-surface-low/40 p-4">
           <span className="text-xs text-on-surface-variant">
-            {loading
-              ? "Đang tải..."
-              : `Hiển thị ${items.length} lớp học`}
+            {loading ? "Đang tải..." : `Hiển thị ${items.length} / ${totalCount} lớp học`}
           </span>
         </div>
       </div>
@@ -791,19 +952,20 @@ function ClassesContent() {
               </button>
             </div>
             <div className="flex max-h-[85dvh] flex-col gap-4 overflow-y-auto p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-              {editing ? (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-on-surface-variant">
-                    Mã lớp (không đổi)
-                  </label>
-                  <input
-                    className="input font-mono text-sm font-semibold"
-                    value={editing.code}
-                    disabled
-                    readOnly
-                  />
-                </div>
-              ) : null}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-foreground">Mã lớp</label>
+                <input
+                  className="input font-mono text-sm font-semibold"
+                  placeholder="Để trống sẽ tự tạo từ khóa học"
+                  value={form.code}
+                  onChange={(e) => setForm({ ...form, code: e.target.value })}
+                />
+                <p className="text-[11px] text-on-surface-variant">
+                  {editing
+                    ? "Có thể chỉnh sửa mã lớp (phải là duy nhất)."
+                    : "Không bắt buộc — để trống hệ thống tự tạo từ tên khóa học."}
+                </p>
+              </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold text-foreground">
@@ -846,15 +1008,7 @@ function ClassesContent() {
                     <p className="text-[11px] text-amber-700">
                       Hãy thêm khóa học trong cùng chương trình nhé.
                     </p>
-                  ) : !editing ? (
-                    <p className="text-[11px] text-on-surface-variant">
-                      Mã lớp sẽ được tạo tự động từ tên khóa học.
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-on-surface-variant">
-                      Đổi khóa học không thay đổi mã lớp.
-                    </p>
-                  )}
+                  ) : null}
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -962,31 +1116,43 @@ function ClassesContent() {
               {isAdmin ? (
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-semibold text-foreground">
-                    Giáo viên phụ trách <span className="text-danger">*</span>
+                    Giáo viên / Trợ giảng <span className="text-danger">*</span>
                   </label>
                   {teacherOptions.length === 0 ? (
                     <p className="text-xs text-on-surface-variant">
                       Chưa có giáo viên đã duyệt để gán.
                     </p>
                   ) : (
-                    <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-lg border border-border bg-surface-low/40 p-2">
+                    <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-lg border border-border bg-surface-low/40 p-2">
                       {teacherOptions.map((t) => {
-                        const checked = form.teacher_ids.includes(t.id);
+                        const assignment = form.teachers.find((x) => x.lms_user_id === t.id);
+                        const checked = !!assignment;
                         return (
-                          <label
+                          <div
                             key={t.id}
-                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface"
+                            className="flex flex-wrap items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface"
                           >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleTeacher(t.id)}
-                            />
-                            <span className="font-medium">{t.name || t.email}</span>
-                            {t.name && t.email ? (
-                              <span className="text-xs text-on-surface-variant">{t.email}</span>
+                            <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleTeacher(t.id)}
+                              />
+                              <span className="truncate font-medium">{t.name || t.email}</span>
+                            </label>
+                            {assignment ? (
+                              <select
+                                className="input !h-8 !w-auto !py-0 text-xs"
+                                value={assignment.role}
+                                onChange={(e) =>
+                                  setTeacherRole(t.id, e.target.value === "ta" ? "ta" : "teacher")
+                                }
+                              >
+                                <option value="teacher">Giáo viên</option>
+                                <option value="ta">Trợ giảng (TA)</option>
+                              </select>
                             ) : null}
-                          </label>
+                          </div>
                         );
                       })}
                     </div>

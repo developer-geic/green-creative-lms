@@ -51,9 +51,9 @@ export function StatsCharts({ summary, byTeacher }: StatsChartsProps) {
 
   const statusData = useMemo(() => {
     const rows = [
-      { name: "Đang hoạt động", value: summary.active_classes, color: COLOR_ACTIVE },
+      { name: "Đang học", value: summary.active_classes, color: COLOR_ACTIVE },
       { name: "Đã kết thúc", value: summary.ended_classes, color: COLOR_ENDED },
-      { name: "Ngừng hoạt động", value: summary.inactive_classes, color: COLOR_INACTIVE },
+      { name: "Chờ khai giảng / tuyển sinh", value: summary.inactive_classes, color: COLOR_INACTIVE },
     ];
     return rows.filter((r) => r.value > 0);
   }, [summary]);

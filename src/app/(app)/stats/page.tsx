@@ -128,7 +128,7 @@ function TeacherTable({ rows }: { rows: StatsByTeacher[] }) {
             <tr className="border-b border-border bg-surface-low text-xs font-semibold text-on-surface-variant">
               <th className="whitespace-nowrap px-4 py-3">Giáo viên</th>
               <th className="whitespace-nowrap px-4 py-3">Số lớp</th>
-              <th className="whitespace-nowrap px-4 py-3">Đang hoạt động</th>
+              <th className="whitespace-nowrap px-4 py-3">Đang học</th>
               <th className="whitespace-nowrap px-4 py-3">Đã kết thúc</th>
               <th className="whitespace-nowrap px-4 py-3 pr-6">Học viên</th>
             </tr>
@@ -276,7 +276,7 @@ function StatsContent() {
             icon={BookOpen}
           />
           <KpiCard
-            label="Đang hoạt động"
+            label="Đang học"
             value={summary.active_classes}
             hint={`/ ${summary.total_classes} lớp`}
             icon={DoorOpen}

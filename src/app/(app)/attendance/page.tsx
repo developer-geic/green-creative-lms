@@ -43,8 +43,7 @@ const WEEKDAY_VI = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"] as const;
 const STATUS_LABEL: Record<string, string> = {
   "": "Trống",
   present: "Có mặt",
-  excused: "Có phép",
-  unexcused: "Không phép",
+  unexcused: "Vắng",
 };
 
 type PendingCell = {
