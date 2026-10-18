@@ -156,6 +156,7 @@ export default function LoginPage() {
               className="input"
               type="password"
               required
+              autoFocus
               disabled={loading}
               placeholder="Mật khẩu"
               value={password}

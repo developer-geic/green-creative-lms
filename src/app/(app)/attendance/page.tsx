@@ -21,13 +21,8 @@ const ATT_OPTIONS = [
     className: "bg-[#ecfdf5] text-[#065f46]",
   },
   {
-    value: "excused",
-    label: "Có phép",
-    className: "bg-[#fffbeb] text-[#92400e]",
-  },
-  {
     value: "unexcused",
-    label: "Không phép",
+    label: "Vắng",
     className: "bg-[#fef2f2] text-[#991b1b]",
   },
 ];
@@ -391,11 +386,8 @@ function AttendanceContent() {
             <span className="inline-flex items-center gap-1 rounded bg-[#ecfdf5] px-2.5 py-1 text-[#065f46]">
               Có mặt
             </span>
-            <span className="inline-flex items-center gap-1 rounded bg-[#fffbeb] px-2.5 py-1 text-[#92400e]">
-              Có phép
-            </span>
             <span className="inline-flex items-center gap-1 rounded bg-[#fef2f2] px-2.5 py-1 text-[#991b1b]">
-              Không phép
+              Vắng
             </span>
           </div>
         </div>
