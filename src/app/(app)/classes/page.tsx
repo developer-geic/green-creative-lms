@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useSession } from "next-auth/react";
 import {
+  Check,
   Download,
   Eye,
   Pencil,
@@ -16,11 +16,11 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ActionMenu, type ActionMenuEntry } from "@/components/ActionMenu";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SearchField } from "@/components/SearchField";
 import { SelectField } from "@/components/SelectField";
 import { TimeRangeField } from "@/components/TimeRangeField";
-import { Tooltip } from "@/components/Tooltip";
 import { useCatalog } from "@/hooks/useCatalog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { lmsApi } from "@/lib/api";
@@ -40,6 +40,17 @@ const STATUS_OPTIONS = [
 ];
 
 type TeacherAssignment = { lms_user_id: number; role: "teacher" | "ta" };
+
+const DAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"] as const;
+
+function formatClassDays(days?: number[] | null): string {
+  if (!Array.isArray(days) || !days.length) return "";
+  const labels = [...new Set(days)]
+    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+    .sort((a, b) => a - b)
+    .map((d) => DAY_LABELS[d]);
+  return labels.join(" - ");
+}
 
 function formatClassDate(value?: string | null): string {
   if (!value) return "—";
@@ -746,6 +757,76 @@ function ClassesContent() {
                 const pct = max > 0 ? Math.round(((c.active_student_count || 0) / max) * 100) : 0;
                 const mainTeachers = (c.teachers || []).filter((t) => t.role !== "ta");
                 const tas = (c.teachers || []).filter((t) => t.role === "ta");
+                const daysLabel = formatClassDays(c.days);
+                const scheduleText = (c.schedule || "").trim();
+                const schedulePrimary = daysLabel || scheduleText || "—";
+                const showScheduleNote =
+                  !!daysLabel && !!scheduleText && scheduleText !== daysLabel;
+                const actionItems: ActionMenuEntry[] = [];
+                if (!c.is_locked) {
+                  actionItems.push({
+                    key: "attendance",
+                    label: "Điểm danh",
+                    href: `/attendance?class_id=${c.id}`,
+                    icon: <UserCheck className="h-4 w-4" />,
+                  });
+                }
+                actionItems.push({
+                  key: "view",
+                  label: "Xem chi tiết",
+                  href: `/classes/${c.id}`,
+                  icon: <Eye className="h-4 w-4" />,
+                });
+                if (!c.is_locked && canUpdateClasses) {
+                  actionItems.push({
+                    key: "edit",
+                    label: "Chỉnh sửa lớp",
+                    icon: <Pencil className="h-4 w-4" />,
+                    onClick: () => openEdit(c),
+                  });
+                }
+                if (isAdmin) {
+                  actionItems.push({ type: "divider", key: "div-status" });
+                  for (const opt of STATUS_OPTIONS) {
+                    const isCurrent = opt.value === c.status;
+                    actionItems.push({
+                      key: `status-${opt.value}`,
+                      label: opt.label,
+                      disabled: isCurrent,
+                      icon: isCurrent ? <Check className="h-4 w-4 text-primary" /> : undefined,
+                      onClick: () =>
+                        setPendingAction({
+                          type: "status",
+                          id: c.id,
+                          code: c.code,
+                          status: opt.value,
+                        }),
+                    });
+                  }
+                }
+                const canEnd = !c.is_locked && canUpdateClasses;
+                const canDelete = canDeleteClasses && !c.is_locked;
+                if (canEnd || canDelete) {
+                  actionItems.push({ type: "divider", key: "div-danger" });
+                }
+                if (canEnd) {
+                  actionItems.push({
+                    key: "end",
+                    label: "Kết thúc lớp",
+                    danger: true,
+                    icon: <XCircle className="h-4 w-4" />,
+                    onClick: () => setPendingAction({ type: "end", id: c.id, code: c.code }),
+                  });
+                }
+                if (canDelete) {
+                  actionItems.push({
+                    key: "delete",
+                    label: "Xóa lớp",
+                    danger: true,
+                    icon: <Trash2 className="h-4 w-4" />,
+                    onClick: () => setPendingAction({ type: "delete", id: c.id, code: c.code }),
+                  });
+                }
                 return (
                   <tr
                     key={c.id}
@@ -769,7 +850,12 @@ function ClassesContent() {
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex flex-col">
-                        <span className="font-medium">{c.schedule || "—"}</span>
+                        <span className="font-medium">{schedulePrimary}</span>
+                        {showScheduleNote ? (
+                          <span className="text-[11px] text-on-surface-variant">
+                            {scheduleText}
+                          </span>
+                        ) : null}
                         <span className="text-[11px] text-on-surface-variant">{c.time || ""}</span>
                       </div>
                     </td>
@@ -824,86 +910,10 @@ function ClassesContent() {
                       <StatusPill status={c.status} />
                     </td>
                     <td className="px-4 py-3.5 pr-6 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {!c.is_locked ? (
-                          <Tooltip content="Điểm danh">
-                            <Link
-                              href={`/attendance?class_id=${c.id}`}
-                              className="btn btn-primary !px-2.5 !py-1 text-[11px]"
-                              aria-label="Điểm danh"
-                            >
-                              <UserCheck className="h-3.5 w-3.5" />
-                            </Link>
-                          </Tooltip>
-                        ) : null}
-                        <Tooltip content="Xem chi tiết">
-                          <Link
-                            href={`/classes/${c.id}`}
-                            className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
-                            aria-label="Xem chi tiết"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Link>
-                        </Tooltip>
-                        {!c.is_locked && canUpdateClasses ? (
-                          <Tooltip content="Chỉnh sửa lớp">
-                            <button
-                              type="button"
-                              className="rounded-md p-1.5 text-on-surface-variant transition-colors hover:bg-surface-low hover:text-foreground"
-                              aria-label="Chỉnh sửa lớp"
-                              onClick={() => openEdit(c)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                          </Tooltip>
-                        ) : null}
-                        {!c.is_locked && canUpdateClasses ? (
-                          <Tooltip content="Kết thúc lớp">
-                            <button
-                              type="button"
-                              className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
-                              aria-label="Kết thúc lớp"
-                              onClick={() => setPendingAction({ type: "end", id: c.id, code: c.code })}
-                            >
-                              <XCircle className="h-4 w-4" />
-                            </button>
-                          </Tooltip>
-                        ) : null}
-                        {canDeleteClasses && !c.is_locked ? (
-                          <Tooltip content="Xóa lớp">
-                            <button
-                              type="button"
-                              className="rounded-md p-1.5 text-danger transition-colors hover:bg-danger-container"
-                              aria-label="Xóa lớp"
-                              onClick={() =>
-                                setPendingAction({ type: "delete", id: c.id, code: c.code })
-                              }
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </Tooltip>
-                        ) : null}
-                        {isAdmin ? (
-                          <Tooltip content="Đổi trạng thái lớp">
-                            <SelectField
-                              size="sm"
-                              className="w-[7.5rem]"
-                              aria-label={`Trạng thái lớp ${c.code}`}
-                              value={c.status}
-                              options={STATUS_OPTIONS}
-                              onChange={(status) => {
-                                if (status === c.status) return;
-                                setPendingAction({
-                                  type: "status",
-                                  id: c.id,
-                                  code: c.code,
-                                  status,
-                                });
-                              }}
-                            />
-                          </Tooltip>
-                        ) : null}
-                      </div>
+                      <ActionMenu
+                        aria-label={`Hành động lớp ${c.code}`}
+                        items={actionItems}
+                      />
                     </td>
                   </tr>
                 );
