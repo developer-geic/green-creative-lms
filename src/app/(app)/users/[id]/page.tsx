@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useEffect, useState, useTransition } from "react";
 import { ArrowLeft, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { AvatarEditor, pickAvatarPath } from "@/components/AvatarEditor";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorStatusView } from "@/components/ErrorStatusView";
 import { SelectField } from "@/components/SelectField";
-import { invalidateMeCache } from "@/hooks/usePermissions";
+import { invalidateMeCache, usePermissions } from "@/hooks/usePermissions";
 import { lmsApi } from "@/lib/api";
 import type {
   LmsRbacRole,
@@ -30,6 +32,8 @@ import {
   userStatusLabel,
   userStatusPillClass,
 } from "./user-detail-fields";
+
+type AccountConfirm = "disable" | "enable" | "delete" | "reset" | null;
 
 function profileFieldValue(profile: TeacherProfile, key: string): string {
   if (key === "dob") return displayValue(formatDob(profile.dob) || null);
@@ -74,6 +78,11 @@ function UserDetailSkeleton() {
 export default function UserDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const router = useRouter();
+  const { data: session } = useSession();
+  const { can } = usePermissions();
+  const canUpdate = can("users.update");
+  const canDelete = can("users.delete");
   const [data, setData] = useState<UserDetailPayload | null>(null);
   const [missing, setMissing] = useState(false);
   const [avatarOverride, setAvatarOverride] = useState<string | null>(null);
@@ -81,6 +90,8 @@ export default function UserDetailPage() {
   const [reviewingId, setReviewingId] = useState<number | null>(null);
   const [roles, setRoles] = useState<LmsRbacRole[]>([]);
   const [savingRole, setSavingRole] = useState(false);
+  const [accountConfirm, setAccountConfirm] = useState<AccountConfirm>(null);
+  const [accountPending, startAccountAction] = useTransition();
 
   function load() {
     setMissing(false);
@@ -151,6 +162,39 @@ export default function UserDetailPage() {
     });
   }
 
+  function runAccountAction() {
+    if (!accountConfirm) return;
+    const action = accountConfirm;
+    startAccountAction(async () => {
+      try {
+        if (action === "disable") {
+          await lmsApi.updateUser(id, { status: "disabled" });
+          toast.success("Đã vô hiệu hóa tài khoản — phiên đăng nhập đã bị thu hồi");
+        } else if (action === "enable") {
+          await lmsApi.updateUser(id, { status: "approved" });
+          toast.success("Đã kích hoạt lại tài khoản");
+        } else if (action === "reset") {
+          await lmsApi.resetUserPassword(id);
+          toast.success("Đã reset mật khẩu — người dùng đặt lại khi đăng nhập");
+        } else {
+          await lmsApi.deleteUser(id);
+          toast.success("Đã xóa tài khoản");
+          setAccountConfirm(null);
+          router.push("/users");
+          return;
+        }
+        setAccountConfirm(null);
+        load();
+      } catch (e: unknown) {
+        toast.error(
+          e instanceof Error
+            ? e.message
+            : (e as { message?: string })?.message || "Không thực hiện được thao tác",
+        );
+      }
+    });
+  }
+
   if (missing) {
     return (
       <ErrorStatusView
@@ -176,6 +220,10 @@ export default function UserDetailPage() {
     pickAvatarPath(profile) ||
     null;
   const isTeacher = user?.role === "teacher";
+  const sessionUserId = session?.user?.id;
+  const isSelf =
+    sessionUserId != null && user?.id != null && Number(sessionUserId) === Number(user.id);
+  const showAccountActions = (canUpdate || canDelete) && !isSelf;
 
   return (
     <div className="flex w-full flex-col gap-6">
@@ -222,6 +270,58 @@ export default function UserDetailPage() {
           </div>
         </div>
       </div>
+
+      {showAccountActions ? (
+        <div className="overflow-hidden rounded-xl bg-surface shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+          <div className="border-b border-surface-low px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+              <h2 className="text-lg font-semibold text-foreground">Tài khoản</h2>
+            </div>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              Vô hiệu hóa, reset mật khẩu hoặc xóa sẽ thu hồi phiên đăng nhập ngay lập tức.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 p-4">
+            {canUpdate && user?.status !== "pending" ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setAccountConfirm("reset")}
+              >
+                Reset mật khẩu
+              </button>
+            ) : null}
+            {canUpdate && user?.status === "approved" ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setAccountConfirm("disable")}
+              >
+                Vô hiệu hóa
+              </button>
+            ) : null}
+            {canUpdate && user?.status === "disabled" ? (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setAccountConfirm("enable")}
+              >
+                Kích hoạt lại
+              </button>
+            ) : null}
+            {canDelete ? (
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => setAccountConfirm("delete")}
+              >
+                Xóa tài khoản
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="card">
         <div className="mb-4 flex items-center gap-2">
@@ -452,6 +552,45 @@ export default function UserDetailPage() {
           </p>
         )}
       </div>
+
+      {accountConfirm ? (
+        <ConfirmDialog
+          open
+          title={
+            accountConfirm === "disable"
+              ? "Vô hiệu hóa tài khoản?"
+              : accountConfirm === "enable"
+                ? "Kích hoạt lại tài khoản?"
+                : accountConfirm === "reset"
+                  ? "Reset mật khẩu?"
+                  : "Xóa tài khoản?"
+          }
+          description={
+            accountConfirm === "disable"
+              ? `${user?.email || "Tài khoản này"} sẽ không đăng nhập được và mọi phiên hiện tại bị thu hồi ngay.`
+              : accountConfirm === "enable"
+                ? `${user?.email || "Tài khoản này"} sẽ được phép đăng nhập lại.`
+                : accountConfirm === "reset"
+                  ? `${user?.email || "Tài khoản này"} sẽ bị đăng xuất ngay và phải đặt mật khẩu mới ở bước đăng nhập.`
+                  : `${user?.email || "Tài khoản này"} sẽ bị xóa mềm và không còn hiện trong danh sách. Phiên đăng nhập bị thu hồi ngay. Có thể tạo lại cùng email sau.`
+          }
+          confirmLabel={
+            accountConfirm === "disable"
+              ? "Vô hiệu hóa"
+              : accountConfirm === "enable"
+                ? "Kích hoạt"
+                : accountConfirm === "reset"
+                  ? "Reset mật khẩu"
+                  : "Xóa tài khoản"
+          }
+          variant={accountConfirm === "enable" ? "primary" : "danger"}
+          pending={accountPending}
+          onCancel={() => {
+            if (!accountPending) setAccountConfirm(null);
+          }}
+          onConfirm={() => runAccountAction()}
+        />
+      ) : null}
     </div>
   );
 }

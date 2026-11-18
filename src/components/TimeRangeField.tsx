@@ -292,12 +292,7 @@ function UnitSuggest({
         value={draft}
         className="h-10 w-[4.75rem] rounded-lg bg-surface-low pl-2.5 pr-6 text-sm font-semibold text-foreground outline-none focus:bg-surface focus:shadow-[0_0_0_2px_var(--primary)] disabled:cursor-not-allowed disabled:opacity-50"
         onChange={(e) => {
-          const digits = e.target.value.replace(/\D/g, "");
-          let next = digits;
-          if (draft && digits.length > draft.length && digits.startsWith(draft)) {
-            next = digits.slice(draft.length);
-          }
-          next = next.slice(0, 2);
+          const next = e.target.value.replace(/\D/g, "").slice(0, 2);
           setDraft(next);
           setQuery(next);
           setOpen(true);

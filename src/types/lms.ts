@@ -135,9 +135,22 @@ export type StatsByTeacher = {
   students_active: number;
 };
 
+export type StatsClassRow = {
+  id: number;
+  code: string;
+  status: string;
+  course?: string | null;
+  program?: string | null;
+  teacher_ids: number[];
+  students: number;
+  students_active: number;
+  attendance_sessions: number | null;
+};
+
 export type StatsPayload = {
   summary: StatsSummary;
   by_teacher: StatsByTeacher[];
+  classes?: StatsClassRow[];
 };
 
 export type TeacherProfile = {

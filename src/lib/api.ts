@@ -215,6 +215,11 @@ export const lmsApi = {
     }),
   updateUser: (id: number | string, body: unknown) =>
     lmsFetch(`/lms/users/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteUser: (id: number | string) =>
+    lmsFetch(`/lms/users/${id}`, { method: "DELETE" }),
+  resetUserPassword: (id: number | string) =>
+    lmsFetch(`/lms/users/${id}/reset-password`, { method: "POST" }),
+  logout: () => lmsFetch("/lms/auth/logout", { method: "POST" }),
   rbacPermissions: () => lmsFetch("/lms/rbac/permissions"),
   createRbacPermission: (body: unknown) =>
     lmsFetch("/lms/rbac/permissions", { method: "POST", body: JSON.stringify(body) }),
@@ -277,6 +282,8 @@ export const lmsApi = {
     }),
   createUser: (body: unknown) =>
     lmsFetch("/lms/users", { method: "POST", body: JSON.stringify(body) }),
+  rejectUser: (id: number | string) =>
+    lmsFetch(`/lms/users/${id}/reject`, { method: "POST" }),
   reviewProfileRequest: (id: number | string, action: "approve" | "reject", note?: string) =>
     lmsFetch(`/lms/teacher-profile-requests/${id}/review`, {
       method: "POST",

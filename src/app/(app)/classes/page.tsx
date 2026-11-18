@@ -245,6 +245,10 @@ function ClassesContent() {
       return;
     }
     setAccessChecked(true);
+    if (!isAdmin) {
+      setTeacherOptions([]);
+      return;
+    }
     lmsApi
       .users("?role=teacher&status=approved&limit=100")
       .then((usersRes) => {
@@ -255,6 +259,7 @@ function ClassesContent() {
     sessionStatus,
     permsReady,
     canViewClasses,
+    isAdmin,
     router,
   ]);
 
@@ -700,20 +705,22 @@ function ClassesContent() {
             ]}
             onChange={applyProgramFilter}
           />
-          <SelectField
-            className="min-w-[10rem] flex-1 basis-[10rem] sm:flex-none sm:w-44"
-            aria-label="Lọc theo giáo viên"
-            value={filterTeacherId}
-            placeholder="Giáo viên"
-            options={[
-              { value: "", label: "Tất cả giáo viên" },
-              ...teacherOptions.map((t) => ({
-                value: String(t.id),
-                label: t.name || t.email,
-              })),
-            ]}
-            onChange={applyTeacherFilter}
-          />
+          {isAdmin ? (
+            <SelectField
+              className="min-w-[10rem] flex-1 basis-[10rem] sm:flex-none sm:w-44"
+              aria-label="Lọc theo giáo viên"
+              value={filterTeacherId}
+              placeholder="Giáo viên"
+              options={[
+                { value: "", label: "Tất cả giáo viên" },
+                ...teacherOptions.map((t) => ({
+                  value: String(t.id),
+                  label: t.name || t.email,
+                })),
+              ]}
+              onChange={applyTeacherFilter}
+            />
+          ) : null}
           <SelectField
             className="min-w-[10rem] flex-1 basis-[10rem] sm:flex-none sm:w-52"
             aria-label="Lọc theo trạng thái"

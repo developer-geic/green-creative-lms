@@ -264,7 +264,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               title="Đăng xuất"
               onClick={() => {
                 invalidateMeCache();
-                signOut({ callbackUrl: "/login" });
+                void lmsApi
+                  .logout()
+                  .catch(() => undefined)
+                  .finally(() => {
+                    void signOut({ callbackUrl: "/login" });
+                  });
               }}
             >
               <LogOut className="h-4 w-4" />

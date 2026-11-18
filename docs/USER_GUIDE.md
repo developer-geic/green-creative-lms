@@ -36,11 +36,14 @@ Vai trò có sẵn sau seed: **`teacher`** (giáo viên), **`catalog_manager`** 
 |--------|---------|
 | `pending` | Chờ Admin duyệt — chưa đăng nhập được |
 | `approved` | Đã duyệt — đăng nhập bình thường |
-| `disabled` | Bị khóa — không đăng nhập được |
+| `disabled` | Bị khóa (vô hiệu hóa) — không đăng nhập được; phiên hiện tại bị **thu hồi ngay** |
+
+**Xóa tài khoản** = xóa mềm (`deleted_at`): không còn hiện trong danh sách / đăng nhập; phiên bị thu hồi ngay; có thể tạo lại cùng email sau.
 
 ### Phiên đăng nhập hết hạn
 - Access token được làm mới tự động (khoảng mỗi phút / khi quay lại tab).
 - Nếu refresh thất bại hoặc API trả **401**, hệ thống **tự đăng xuất** và đưa về trang Đăng nhập.
+- Admin **vô hiệu hóa** hoặc **xóa** user → token Passport bị thu hồi → request tiếp theo **401** → về Đăng nhập.
 - API trả **403** (không đủ quyền) → trang **Không có quyền truy cập** (`/forbidden`), vẫn giữ phiên đăng nhập.
 - URL không tồn tại → trang **404**. Lỗi render nghiêm trọng → trang **500** (có nút Thử lại).
 
@@ -268,14 +271,16 @@ Admin **bypass** mọi check quyền (không phụ thuộc tick trên role).
 
 ### Người dùng
 1. Duyệt **pending** → gán role hệ thống (`admin` / `teacher`) và **vai trò LMS** (matrix quyền).
-2. Tạo user, khóa (`disabled`), reset mật khẩu.
-3. Click tên giáo viên → hồ sơ; (tuỳ bản UI) gắn role LMS.
-4. Duyệt yêu cầu đổi hồ sơ GV (từ lần sửa thứ 2).
+2. Tạo user; **vô hiệu hóa** (`disabled`) hoặc **kích hoạt lại** (`approved`) từ danh sách / chi tiết — thu hồi phiên ngay.
+3. **Reset mật khẩu**: xóa mật khẩu hiện tại, thu hồi phiên ngay. Lần đăng nhập sau, user đặt mật khẩu mới. Không reset chính mình (đổi mật khẩu ở hồ sơ cá nhân).
+4. **Xóa** (xóa mềm) từ trang chi tiết — thu hồi phiên ngay; email có thể dùng lại sau.
+5. Click tên / Chi tiết → hồ sơ; gắn role LMS (teacher).
+6. Duyệt yêu cầu đổi hồ sơ GV (từ lần sửa thứ 2).
 
-> Không vô hiệu hóa / xóa **admin cuối cùng**.
+> Không vô hiệu hóa / xóa **chính mình** hoặc **admin cuối cùng**.
 
 ### Thống kê / Import
-- Thống kê: lọc GV, năm, tháng; KPI lớp / HV.
+- Thống kê: lọc GV, năm, tháng; KPI lớp / HV. Chọn giáo viên → xem ngay thống kê từng lớp của GV đó.
 - Import workbook sheet prototype (`01_CLASS` …) khi đưa dữ liệu cũ vào LMS.
 
 ### Thông báo

@@ -1,29 +1,45 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { AvatarThumb } from "@/components/AvatarEditor";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { lmsApi } from "@/lib/api";
+import {
+  roleLabel,
+  userStatusLabel,
+  userStatusPillClass,
+} from "./[id]/user-detail-fields";
+
+type UserRow = {
+  id: number;
+  name?: string;
+  email: string;
+  role: string;
+  status: string;
+  avatar?: string | null;
+};
+
+type PendingConfirm =
+  | { type: "disable"; user: UserRow }
+  | { type: "enable"; user: UserRow }
+  | { type: "reset"; user: UserRow }
+  | null;
 
 export default function UsersPage() {
+  const { data: session } = useSession();
   const { can } = usePermissions();
   const canCreate = can("users.create");
   const canUpdate = can("users.update");
-  const [items, setItems] = useState<
-    Array<{
-      id: number;
-      name?: string;
-      email: string;
-      role: string;
-      status: string;
-      avatar?: string | null;
-    }>
-  >([]);
+  const [items, setItems] = useState<UserRow[]>([]);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("teacher");
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
+  const [actionPending, startAction] = useTransition();
 
   function load() {
     lmsApi
@@ -59,6 +75,34 @@ export default function UsersPage() {
     }
   }
 
+  function runConfirm() {
+    if (!pendingConfirm) return;
+    const { type, user } = pendingConfirm;
+    startAction(async () => {
+      try {
+        if (type === "disable") {
+          await lmsApi.updateUser(user.id, { status: "disabled" });
+          toast.success("Đã vô hiệu hóa tài khoản");
+        } else if (type === "reset") {
+          await lmsApi.resetUserPassword(user.id);
+          toast.success("Đã reset mật khẩu");
+        } else {
+          await lmsApi.updateUser(user.id, { status: "approved" });
+          toast.success("Đã kích hoạt lại tài khoản");
+        }
+        setPendingConfirm(null);
+        load();
+      } catch (e: unknown) {
+        toast.error(
+          e instanceof Error
+            ? e.message
+            : (e as { message?: string })?.message || "Không cập nhật được trạng thái",
+        );
+      }
+    });
+  }
+
+  const sessionUserId = session?.user?.id;
   const pending = items.filter((u) => u.status === "pending");
   const others = items.filter((u) => u.status !== "pending");
 
@@ -74,31 +118,31 @@ export default function UsersPage() {
       </div>
 
       {canCreate ? (
-      <form onSubmit={create} className="card flex flex-wrap gap-3 !p-4">
-        <input
-          className="input w-full sm:max-w-xs"
-          required
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          className="input w-full sm:max-w-xs"
-          placeholder="Họ tên"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <select
-          className="input w-full sm:max-w-[160px]"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-        >
-          <option value="teacher">Giáo viên</option>
-          <option value="admin">Admin</option>
-        </select>
-        <button className="btn btn-primary w-full sm:w-auto">+ Tạo người dùng mới</button>
-      </form>
+        <form onSubmit={create} className="card flex flex-wrap gap-3 !p-4">
+          <input
+            className="input w-full sm:max-w-xs"
+            required
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            className="input w-full sm:max-w-xs"
+            placeholder="Họ tên"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <select
+            className="input w-full sm:max-w-[160px]"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+          >
+            <option value="teacher">Giáo viên</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button className="btn btn-primary w-full sm:w-auto">+ Tạo người dùng mới</button>
+        </form>
       ) : null}
 
       {pending.length > 0 && canUpdate ? (
@@ -148,33 +192,62 @@ export default function UsersPage() {
                     <div className="flex items-center gap-2.5">
                       <AvatarThumb path={u.avatar} name={u.name || u.email} size="sm" />
                       <div>
-                        {u.role === "teacher" ? (
-                          <Link
-                            className="font-semibold hover:text-primary"
-                            href={`/users/${u.id}`}
-                          >
-                            {u.name || "—"}
-                          </Link>
-                        ) : (
-                          <span className="font-semibold">{u.name || "—"}</span>
-                        )}
+                        <Link
+                          className="font-semibold hover:text-primary"
+                          href={`/users/${u.id}`}
+                        >
+                          {u.name || "—"}
+                        </Link>
                         <div className="text-xs text-on-surface-variant">{u.email}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="pill pill-good">{u.role}</span>
+                    <span className="pill pill-good">{roleLabel(u.role)}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="pill pill-neutral">{u.status}</span>
+                    <span className={userStatusPillClass(u.status)}>
+                      {userStatusLabel(u.status)}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/users/${u.id}`}
-                      className="text-xs font-semibold text-primary hover:underline"
-                    >
-                      Chi tiết
-                    </Link>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {canUpdate &&
+                      u.status !== "pending" &&
+                      Number(sessionUserId) !== u.id ? (
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-on-surface-variant hover:underline"
+                          onClick={() => setPendingConfirm({ type: "reset", user: u })}
+                        >
+                          Reset MK
+                        </button>
+                      ) : null}
+                      {canUpdate && u.status === "approved" ? (
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-amber-800 hover:underline"
+                          onClick={() => setPendingConfirm({ type: "disable", user: u })}
+                        >
+                          Vô hiệu
+                        </button>
+                      ) : null}
+                      {canUpdate && u.status === "disabled" ? (
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-primary hover:underline"
+                          onClick={() => setPendingConfirm({ type: "enable", user: u })}
+                        >
+                          Kích hoạt
+                        </button>
+                      ) : null}
+                      <Link
+                        href={`/users/${u.id}`}
+                        className="text-xs font-semibold text-primary hover:underline"
+                      >
+                        Chi tiết
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -182,6 +255,39 @@ export default function UsersPage() {
           </table>
         </div>
       </div>
+
+      {pendingConfirm ? (
+        <ConfirmDialog
+          open
+          title={
+            pendingConfirm.type === "disable"
+              ? "Vô hiệu hóa tài khoản?"
+              : pendingConfirm.type === "reset"
+                ? "Reset mật khẩu?"
+                : "Kích hoạt lại tài khoản?"
+          }
+          description={
+            pendingConfirm.type === "disable"
+              ? `Tài khoản ${pendingConfirm.user.email} sẽ không đăng nhập được và phiên hiện tại bị thu hồi ngay.`
+              : pendingConfirm.type === "reset"
+                ? `Tài khoản ${pendingConfirm.user.email} sẽ bị đăng xuất ngay và phải đặt mật khẩu mới ở bước đăng nhập.`
+                : `Tài khoản ${pendingConfirm.user.email} sẽ được phép đăng nhập lại.`
+          }
+          confirmLabel={
+            pendingConfirm.type === "disable"
+              ? "Vô hiệu hóa"
+              : pendingConfirm.type === "reset"
+                ? "Reset mật khẩu"
+                : "Kích hoạt"
+          }
+          variant={pendingConfirm.type === "enable" ? "primary" : "danger"}
+          pending={actionPending}
+          onCancel={() => {
+            if (!actionPending) setPendingConfirm(null);
+          }}
+          onConfirm={() => runConfirm()}
+        />
+      ) : null}
     </div>
   );
 }
