@@ -49,4 +49,7 @@ jobs:
             set -e
 
             cd /home/sangtaoxanh.edu.vn/infra
-            docker compose up -d --pull always --no-deps --force-recreate fe-lms-sangtaoxanh
+            docker compose up -d --pull always --no-deps --force-recreate \
+              fe-lms-sangtaoxanh \
+              fe-lms-sangtaoxanh-2
+            docker exec nginx-sangtaoxanh nginx -s reload || true
